@@ -42,20 +42,21 @@ func (m *model) View() tea.View {
 }
 
 func (m *model) header() string {
-	left := " " + m.report.Repo
-	if m.report.Ref != "" {
-		left += " @ " + m.report.Ref
+	excluded := 0
+	for _, r := range m.report.Repos {
+		excluded += r.Excluded
 	}
-	if sha := m.report.SHA; sha != "" {
-		left += " (" + sha[:min(7, len(sha))] + ")"
+	left := fmt.Sprintf(" %d repositories", len(m.report.Repos))
+	if !m.multi && len(m.report.Repos) == 1 {
+		left = " " + m.report.Repos[0].label()
 	}
 	noun := "skills"
-	if len(m.report.Skills) == 1 {
+	if len(m.skills) == 1 {
 		noun = "skill"
 	}
-	right := fmt.Sprintf("%d %s, %d invalid", len(m.report.Skills), noun, m.invalid)
-	if m.report.Excluded > 0 {
-		right += fmt.Sprintf(", %d excluded", m.report.Excluded)
+	right := fmt.Sprintf("%d %s, %d invalid", len(m.skills), noun, m.invalid)
+	if excluded > 0 {
+		right += fmt.Sprintf(", %d excluded", excluded)
 	}
 	right += " "
 
@@ -85,11 +86,11 @@ func (m *model) panes() string {
 
 	listTitle := "Skills"
 	if m.filter != "" {
-		listTitle = fmt.Sprintf("Skills %d/%d", len(m.visible), len(m.report.Skills))
+		listTitle = fmt.Sprintf("Skills %d/%d", len(m.visible), len(m.skills))
 	}
 	var detailTitle string
 	if i := m.selected(); i >= 0 {
-		detailTitle = m.report.Skills[i].DisplayName()
+		detailTitle = m.skills[i].DisplayName()
 	}
 
 	left := box(listTitle, "", m.listLines(), lw, h, m.focus == paneList)
@@ -113,25 +114,40 @@ func (m *model) listLines() []string {
 			lines = append(lines, accentStyle.Render(ansi.Truncate("/ "+m.filter, w, "…")))
 		}
 	}
-	if len(m.visible) == 0 {
+	if len(m.rows) == 0 {
 		msg := "No skills found"
 		switch {
-		case len(m.report.Skills) > 0:
+		case len(m.skills) > 0:
 			msg = "No matches"
-		case m.report.Excluded > 0:
-			msg += fmt.Sprintf(" (%d excluded)", m.report.Excluded)
+		case len(m.report.Repos) > 0 && m.report.Repos[0].Excluded > 0:
+			msg += fmt.Sprintf(" (%d excluded)", m.report.Repos[0].Excluded)
 		}
 		return append(lines, dimStyle.Render(msg))
 	}
-	end := min(m.offset+m.listRows(), len(m.visible))
-	for pos := m.offset; pos < end; pos++ {
-		lines = append(lines, m.row(pos, w))
+	end := min(m.offset+m.listRows(), len(m.rows))
+	for _, r := range m.rows[m.offset:end] {
+		switch r.kind {
+		case rowHeading:
+			lines = append(lines, boldStyle.Render(ansi.Truncate(m.report.Repos[r.repo].label(), w, "…")))
+		case rowEmpty:
+			lines = append(lines, dimStyle.Render(ansi.Truncate("  "+noSkills(m.report.Repos[r.repo].Excluded), w, "…")))
+		default:
+			lines = append(lines, m.row(r.pos, w))
+		}
 	}
 	return lines
 }
 
+// noSkills is the message for a repository with no skills.
+func noSkills(excluded int) string {
+	if excluded > 0 {
+		return fmt.Sprintf("No skills found (%d excluded)", excluded)
+	}
+	return "No skills found"
+}
+
 func (m *model) row(pos, w int) string {
-	s := m.report.Skills[m.visible[pos]]
+	s := m.skills[m.visible[pos]]
 	prefix := "  "
 	if pos == m.cursor {
 		prefix = "> "

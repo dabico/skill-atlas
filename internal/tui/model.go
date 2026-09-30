@@ -21,13 +21,33 @@ const (
 	paneDetail
 )
 
+// rowKind tells the list rows apart; only skill rows can hold the cursor.
+type rowKind int
+
+const (
+	rowSkill rowKind = iota
+	rowHeading
+	rowEmpty // "No skills found" under the heading of a repository with no skills
+)
+
+type listRow struct {
+	kind rowKind
+	repo int // index into report.Repos
+	pos  int // position within visible, for skill rows
+}
+
 type model struct {
 	report  Report
+	skills  []skill.Skill // every repository's skills, in order
+	repoOf  []int         // repository index of each entry in skills
+	multi   bool          // 2 or more repositories
 	invalid int
 
-	visible []int // indices into report.Skills that match the filter
-	cursor  int   // position within visible
-	offset  int   // first visible list row
+	visible []int     // indices into skills that match the filter
+	cursor  int       // position within visible
+	rows    []listRow // what the list pane shows, headings included
+	rowOf   []int     // row index of each position in visible
+	offset  int       // first visible list row
 
 	focus     pane
 	filtering bool
@@ -47,9 +67,14 @@ func newModel(r Report) *model {
 		cache:  map[cacheKey]string{},
 		dark:   true,
 	}
-	for _, s := range r.Skills {
-		if !s.Valid() {
-			m.invalid++
+	m.multi = len(r.Repos) > 1
+	for i, repo := range r.Repos {
+		for _, s := range repo.Skills {
+			m.skills = append(m.skills, s)
+			m.repoOf = append(m.repoOf, i)
+			if !s.Valid() {
+				m.invalid++
+			}
 		}
 	}
 	m.applyFilter()
@@ -177,7 +202,7 @@ func (m *model) clearFilter() {
 	m.applyFilter()
 }
 
-// selected returns the index into report.Skills of the current row, or -1.
+// selected returns the index into skills of the current row, or -1.
 func (m *model) selected() int {
 	if m.cursor < 0 || m.cursor >= len(m.visible) {
 		return -1
@@ -190,8 +215,8 @@ func (m *model) applyFilter() {
 	prev := m.selected()
 	q := strings.ToLower(m.filter)
 	m.visible = m.visible[:0]
-	for i, s := range m.report.Skills {
-		if q == "" || matches(s, q) {
+	for i, s := range m.skills {
+		if q == "" || m.matches(i, s, q) {
 			m.visible = append(m.visible, i)
 		}
 	}
@@ -202,17 +227,53 @@ func (m *model) applyFilter() {
 			break
 		}
 	}
+	m.buildRows()
 	m.clampOffset()
 	m.refreshDetail(m.selected() != prev)
 }
 
-func matches(s skill.Skill, q string) bool {
-	for _, f := range []string{s.DisplayName(), s.Description, s.Path} {
+// matches reports whether skill i contains q; with several repositories the repository name counts too.
+func (m *model) matches(i int, s skill.Skill, q string) bool {
+	fields := []string{s.DisplayName(), s.Description, s.Path}
+	if m.multi {
+		fields = append(fields, m.report.Repos[m.repoOf[i]].Name)
+	}
+	for _, f := range fields {
 		if strings.Contains(strings.ToLower(f), q) {
 			return true
 		}
 	}
 	return false
+}
+
+// buildRows lays out the list: one row per visible skill, grouped under a heading per repository when there are several.
+func (m *model) buildRows() {
+	m.rows = m.rows[:0]
+	m.rowOf = m.rowOf[:0]
+	if !m.multi {
+		for pos := range m.visible {
+			m.rowOf = append(m.rowOf, len(m.rows))
+			m.rows = append(m.rows, listRow{kind: rowSkill, pos: pos})
+		}
+		return
+	}
+	pos := 0
+	for r, repo := range m.report.Repos {
+		start := pos
+		for pos < len(m.visible) && m.repoOf[m.visible[pos]] == r {
+			pos++
+		}
+		switch {
+		case pos > start:
+			m.rows = append(m.rows, listRow{kind: rowHeading, repo: r})
+			for p := start; p < pos; p++ {
+				m.rowOf = append(m.rowOf, len(m.rows))
+				m.rows = append(m.rows, listRow{kind: rowSkill, repo: r, pos: p})
+			}
+		case len(repo.Skills) == 0 && m.filter == "":
+			m.rows = append(m.rows, listRow{kind: rowHeading, repo: r}, listRow{kind: rowEmpty, repo: r})
+		}
+	}
 }
 
 func (m *model) setCursor(n int) {
@@ -225,16 +286,23 @@ func (m *model) setCursor(n int) {
 	m.refreshDetail(true)
 }
 
-// clampOffset scrolls the list so the cursor stays visible.
+// clampOffset scrolls the list so the cursor stays visible, with its group heading when that fits.
 func (m *model) clampOffset() {
 	rows := max(m.listRows(), 1)
-	if m.cursor < m.offset {
-		m.offset = m.cursor
+	if m.cursor >= 0 && m.cursor < len(m.rowOf) {
+		cur := m.rowOf[m.cursor]
+		top := cur
+		if cur > 0 && m.rows[cur-1].kind == rowHeading {
+			top = cur - 1
+		}
+		if top < m.offset {
+			m.offset = top
+		}
+		if cur >= m.offset+rows {
+			m.offset = cur - rows + 1
+		}
 	}
-	if m.cursor >= m.offset+rows {
-		m.offset = m.cursor - rows + 1
-	}
-	m.offset = max(0, min(m.offset, max(len(m.visible)-rows, 0)))
+	m.offset = max(0, min(m.offset, max(len(m.rows)-rows, 0)))
 }
 
 func (m *model) relayout() {

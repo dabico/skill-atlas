@@ -12,7 +12,7 @@ import (
 )
 
 type cacheKey struct {
-	path  string
+	skill int // index into model.skills
 	width int
 	dark  bool
 }
@@ -35,14 +35,18 @@ func (m *model) refreshDetail(toTop bool) {
 func (m *model) detailContent(w int) string {
 	i := m.selected()
 	if i < 0 {
-		if len(m.report.Skills) == 0 {
+		if len(m.skills) == 0 {
 			return dimStyle.Render("Nothing to show.")
 		}
 		return dimStyle.Render("No skill selected.")
 	}
-	s := m.report.Skills[i]
+	s := m.skills[i]
 
 	var b strings.Builder
+	if m.multi {
+		b.WriteString(dimStyle.Render(ansi.Truncate(m.report.Repos[m.repoOf[i]].label(), w, "…")))
+		b.WriteString("\n")
+	}
 	b.WriteString(dimStyle.Render(ansi.Truncate(s.Path, w, "…")))
 	b.WriteString("\n\n")
 	if s.Description != "" {
@@ -65,7 +69,7 @@ func (m *model) detailContent(w int) string {
 	if strings.TrimSpace(s.Body) != "" {
 		b.WriteString(dimStyle.Render(strings.Repeat("─", w)))
 		b.WriteString("\n")
-		b.WriteString(m.renderBody(s, w))
+		b.WriteString(m.renderBody(i, s, w))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -124,8 +128,8 @@ func bullet(text string, w int) string {
 }
 
 // renderBody renders the Markdown body with glamour, cached per skill, width and style.
-func (m *model) renderBody(s skill.Skill, w int) string {
-	key := cacheKey{s.Path, w, m.dark}
+func (m *model) renderBody(i int, s skill.Skill, w int) string {
+	key := cacheKey{i, w, m.dark}
 	if out, ok := m.cache[key]; ok {
 		return out
 	}
