@@ -3,4 +3,4 @@
 - [user_working_style.md](user_working_style.md): how the maintainer plans, reviews and changes scope
 - [feedback_shell_gotchas.md](feedback_shell_gotchas.md): `cat` alias injects ANSI codes; write files with Write/Edit; GNU sed
 - [reference_provider_fields.md](reference_provider_fields.md): provider frontmatter field research in `research/`
-- [sessions/2026-09-30.md](sessions/2026-09-30.md): spec, build, CI, PRs #1 to #5, record-demo skill, multi-repo scan
+- [sessions/2026-09-30.md](sessions/2026-09-30.md): spec, build, CI, PRs #1 to #5, record-demo skill, multi-repo scan, HTML screenshot tests

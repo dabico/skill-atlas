@@ -6,12 +6,12 @@ type: project
 
 # Open items
 
-Last updated 2026-09-30. `main` is at `0a2c14b`: PRs #1 to #4 merged, then the maintainer committed `README.md`, `AGENTS.md` (`CLAUDE.md` symlinks to it), `memory/`, `.gitignore`, a PR template and the `record-demo` skill.
+Last updated 2026-09-30. `main` is at `cb297dc`: PRs #1 to #5 merged. Between #4 and #5 the maintainer committed `README.md`, `AGENTS.md` (`CLAUDE.md` symlinks to it), `memory/`, `.gitignore`, a PR template and the `record-demo` skill.
 
 ## Open PRs
 
-- #5 `feature/multi-repo`: several Git URLs per scan, `<url>#<ref>`, parallel clones, TUI and HTML grouped per repo. Also `DEMO_ARGS` and `assets/multi-repo.tape` for `record-demo`. Worktree `.claude/worktrees/multi-repo`. Reworked after the first review: `--ref` removed, partial results with exit 1, `--parallel N`. CI green on 5a30bab; waiting on the maintainer.
-- #5 demo page: `docs/demo/index.html` in that worktree, untracked. The Artifact publish failed: this machine authenticates with `apiKeyHelper`, and Artifacts need a claude.ai login.
+- In progress: `feature/html-screenshots`, Playwright screenshot tests for the HTML report. Worktree `.claude/worktrees/html-screenshots`. No PR yet.
+- The PR #5 demo page is unpublished: `docs/demo/multi-repo/index.html` in the main checkout, ignored by git. The Artifact publish failed: this machine authenticates with `apiKeyHelper`, and Artifacts need a claude.ai login.
 
 ## Known bugs
 
