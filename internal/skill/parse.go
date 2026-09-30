@@ -17,7 +17,7 @@ const (
 	maxCompatibility = 500
 )
 
-var knownFields = []string{"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+var specFields = []string{"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
 
 // Parse reads a SKILL.md and validates it against the Agent Skills specification.
 // path is relative to the repository root; dir is the name of the directory holding the file.
@@ -31,33 +31,32 @@ func Parse(path, dir string, content []byte) Skill {
 		return s
 	}
 
-	fields, errs := parseFields(front)
+	fields, order, errs := parseFields(front)
 	s.Errors = append(s.Errors, errs...)
 	if fields == nil {
 		return s
 	}
-	s.validate(fields)
+	s.validate(fields, order)
 	return s
 }
 
 // parseFields decodes the frontmatter into its top-level fields.
-// A nil map means field checks must stop.
-func parseFields(front string) (map[string]*yaml.Node, []string) {
+// order lists the keys as written. A nil map means field checks must stop.
+func parseFields(front string) (fields map[string]*yaml.Node, order, errs []string) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(front), &doc); err != nil {
 		msg := strings.TrimPrefix(err.Error(), "yaml: ")
-		return nil, []string{"frontmatter isn't valid YAML: " + msg}
+		return nil, nil, []string{"frontmatter isn't valid YAML: " + msg}
 	}
 	if doc.Kind == 0 { // empty or comment-only
-		return map[string]*yaml.Node{}, nil
+		return map[string]*yaml.Node{}, nil, nil
 	}
 	root := resolve(doc.Content[0])
 	if root.Kind != yaml.MappingNode {
-		return nil, []string{"frontmatter must be a YAML mapping"}
+		return nil, nil, []string{"frontmatter must be a YAML mapping"}
 	}
 
-	var errs []string
-	fields := make(map[string]*yaml.Node)
+	fields = make(map[string]*yaml.Node)
 	var unexpected []string
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		key := resolve(root.Content[i]).Value
@@ -66,7 +65,8 @@ func parseFields(front string) (map[string]*yaml.Node, []string) {
 			continue
 		}
 		fields[key] = root.Content[i+1]
-		if !slices.Contains(knownFields, key) {
+		order = append(order, key)
+		if !slices.Contains(specFields, key) && claudeRule(key) == nil {
 			unexpected = append(unexpected, key)
 		}
 	}
@@ -74,16 +74,17 @@ func parseFields(front string) (map[string]*yaml.Node, []string) {
 		slices.Sort(unexpected)
 		errs = append(errs, "unexpected fields: "+strings.Join(unexpected, ", "))
 	}
-	return fields, errs
+	return fields, order, errs
 }
 
-func (s *Skill) validate(fields map[string]*yaml.Node) {
+func (s *Skill) validate(fields map[string]*yaml.Node, order []string) {
 	s.checkName(fields["name"])
 	s.checkDescription(fields["description"])
 	s.checkCompatibility(fields["compatibility"])
 	s.License = s.optionalString("license", fields["license"])
-	s.AllowedTools = s.optionalString("allowed-tools", fields["allowed-tools"])
+	s.checkAllowedTools(fields["allowed-tools"])
 	s.checkMetadata(fields["metadata"])
+	s.checkClaude(fields, order)
 }
 
 func (s *Skill) errorf(format string, args ...any) {
@@ -182,6 +183,18 @@ func (s *Skill) optionalString(field string, n *yaml.Node) string {
 	return v
 }
 
+// checkAllowedTools accepts a string or a list of strings; a list joins with spaces.
+func (s *Skill) checkAllowedTools(n *yaml.Node) {
+	if n == nil {
+		return
+	}
+	v, ok := stringOrList(n, " ")
+	if !ok {
+		s.errorf("allowed-tools must be a string or a list of strings")
+	}
+	s.AllowedTools = v
+}
+
 func (s *Skill) checkMetadata(n *yaml.Node) {
 	if n == nil {
 		return
@@ -227,4 +240,21 @@ func scalar(n *yaml.Node) (string, bool) {
 		return "", true
 	}
 	return n.Value, true
+}
+
+// stringOrList reads a scalar, or a sequence of scalars joined with sep. Null reads as "".
+func stringOrList(n *yaml.Node, sep string) (string, bool) {
+	n = resolve(n)
+	if n.Kind != yaml.SequenceNode {
+		return scalar(n)
+	}
+	items := make([]string, 0, len(n.Content))
+	for _, c := range n.Content {
+		v, ok := scalar(c)
+		if !ok {
+			return "", false
+		}
+		items = append(items, v)
+	}
+	return strings.Join(items, sep), true
 }

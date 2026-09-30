@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/glamour/v2"
@@ -85,7 +86,28 @@ func fieldLines(s skill.Skill, w int) string {
 			lines = append(lines, ansi.Wrap(fmt.Sprintf("  %s: %s", e.Key, e.Value), w, ""))
 		}
 	}
+	lines = append(lines, extensionLines(s.Extensions, w)...)
 	return strings.Join(lines, "\n")
+}
+
+// extensionLines groups provider fields under their provider name, in file order.
+func extensionLines(exts []skill.Extension, w int) []string {
+	var providers []string
+	for _, e := range exts {
+		if !slices.Contains(providers, e.Provider) {
+			providers = append(providers, e.Provider)
+		}
+	}
+	var lines []string
+	for _, p := range providers {
+		lines = append(lines, p+":")
+		for _, e := range exts {
+			if e.Provider == p {
+				lines = append(lines, ansi.Wrap("  "+e.Key+": "+ansi.Strip(e.Value), w, ""))
+			}
+		}
+	}
+	return lines
 }
 
 func bullet(text string, w int) string {

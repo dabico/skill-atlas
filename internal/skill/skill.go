@@ -19,6 +19,9 @@ type Skill struct {
 	AllowedTools  string
 	Metadata      []MetadataEntry // file order
 
+	// Extensions holds provider-specific fields in file order, e.g. Claude Code's argument-hint.
+	Extensions []Extension
+
 	// Body is the Markdown after the frontmatter.
 	Body string
 
@@ -30,6 +33,13 @@ type Skill struct {
 type MetadataEntry struct {
 	Key   string
 	Value string
+}
+
+// Extension is one provider-specific frontmatter field with a display-ready value.
+type Extension struct {
+	Provider string // e.g. "Claude Code"
+	Key      string
+	Value    string
 }
 
 // Valid reports whether the skill breaks no specification rules.

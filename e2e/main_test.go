@@ -184,6 +184,7 @@ type goldenSkill struct {
 	Compatibility string       `json:"compatibility"`
 	AllowedTools  string       `json:"allowedTools"`
 	Metadata      []goldenMeta `json:"metadata"`
+	Extensions    []goldenExt  `json:"extensions"`
 	Errors        []string     `json:"errors"`
 	Valid         bool         `json:"valid"`
 	BodySHA256    string       `json:"bodySha256"`
@@ -194,6 +195,12 @@ type goldenMeta struct {
 	Value string `json:"value"`
 }
 
+type goldenExt struct {
+	Provider string `json:"provider"`
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+}
+
 func toGolden(skills []skill.Skill) []goldenSkill {
 	out := make([]goldenSkill, 0, len(skills))
 	for _, s := range skills {
@@ -201,11 +208,14 @@ func toGolden(skills []skill.Skill) []goldenSkill {
 		g := goldenSkill{
 			Path: s.Path, Dir: s.Dir, Name: s.Name, Description: s.Description,
 			License: s.License, Compatibility: s.Compatibility, AllowedTools: s.AllowedTools,
-			Metadata: []goldenMeta{}, Errors: []string{}, Valid: s.Valid(),
+			Metadata: []goldenMeta{}, Extensions: []goldenExt{}, Errors: []string{}, Valid: s.Valid(),
 			BodySHA256: hex.EncodeToString(sum[:]),
 		}
 		for _, e := range s.Metadata {
 			g.Metadata = append(g.Metadata, goldenMeta{e.Key, e.Value})
+		}
+		for _, e := range s.Extensions {
+			g.Extensions = append(g.Extensions, goldenExt{e.Provider, e.Key, e.Value})
 		}
 		g.Errors = append(g.Errors, s.Errors...)
 		out = append(out, g)
@@ -306,6 +316,9 @@ func fieldDiffs(w, g goldenSkill) []string {
 	}
 	if a, b := jsonStr(w.Metadata), jsonStr(g.Metadata); a != b {
 		out = append(out, fmt.Sprintf("metadata: want %s, got %s", clip(a), clip(b)))
+	}
+	if a, b := jsonStr(w.Extensions), jsonStr(g.Extensions); a != b {
+		out = append(out, fmt.Sprintf("extensions: want %s, got %s", clip(a), clip(b)))
 	}
 	if a, b := jsonStr(w.Errors), jsonStr(g.Errors); a != b {
 		out = append(out, fmt.Sprintf("errors: want %s, got %s", clip(a), clip(b)))

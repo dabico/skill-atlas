@@ -85,8 +85,8 @@ func TestParseErrors(t *testing.T) {
 		{
 			name:    "unexpected fields sorted",
 			dir:     "x",
-			content: "---\nname: x\ndescription: d\nmodel: m\nargument-hint: h\n---\n",
-			want:    []string{"unexpected fields: argument-hint, model"},
+			content: "---\nname: x\ndescription: d\ntype: t\nversion: 1\n---\n",
+			want:    []string{"unexpected fields: type, version"},
 		},
 		{
 			name:    "name null",
@@ -192,7 +192,7 @@ func TestParseErrors(t *testing.T) {
 			name:    "license and allowed-tools not strings",
 			dir:     "x",
 			content: "---\nname: x\ndescription: d\nlicense: [a]\nallowed-tools: {a: b}\n---\n",
-			want:    []string{"license must be a string", "allowed-tools must be a string"},
+			want:    []string{"license must be a string", "allowed-tools must be a string or a list of strings"},
 		},
 		{
 			name:    "metadata not a map",
