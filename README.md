@@ -1,6 +1,6 @@
 # Skill Atlas
 
-Skill Atlas scans a remote Git repository for agent skills and shows them in a terminal UI or an HTML page.
+Skill Atlas scans 1 or more remote Git repositories for agent skills and shows them in a terminal UI or an HTML page.
 
 A skill is a directory with a `SKILL.md` file, as defined by the [Agent Skills specification](https://agentskills.io/specification).
 Skills that break the spec are listed as invalid, with every rule they break.
@@ -20,24 +20,30 @@ Needs Go 1.27. The `git` binary isn't needed.
 ## Usage
 
 ```shell
-skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
+skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<ref>]...
 ```
 
-- `<git-url>` is 1 remote URL over HTTPS or SSH. Local paths aren't supported.
-- `--ref` picks a branch or tag. Without it, the scan uses the remote's default branch. Commit SHAs aren't supported.
-- `--exclude` skips `SKILL.md` files that match a [gitignore pattern](https://git-scm.com/docs/gitignore#_pattern_format). Repeat it to add patterns.
+- `<git-url>` is a remote URL over HTTPS or SSH. Pass several to scan them together. Local paths aren't supported.
+- `#<ref>` after a URL picks a branch or tag for that URL. Without it, the scan uses the remote's default branch. Commit SHAs aren't supported. In zsh with `extendedglob`, quote a URL that has a `#`.
+- `--exclude` skips `SKILL.md` files that match a [gitignore pattern](https://git-scm.com/docs/gitignore#_pattern_format). Repeat it to add patterns. It applies to every repository.
 - `--html` writes the results to an HTML file in the temp directory and opens it in the browser instead of the TUI.
+- `--parallel` sets how many repositories clone at once. The default is 4.
+
+With several repositories, the TUI and the HTML page group skills by repository.
+A repository that fails to clone or scan doesn't stop the others: its error goes to stderr, the results show the rest with the failed one marked, and the exit code is 1.
+If every repository fails, nothing opens and the exit code is 1.
 
 Public HTTPS repositories need no credentials. SSH uses the SSH agent (`SSH_AUTH_SOCK`) and `~/.ssh/known_hosts`.
-The clone is shallow, goes to a temporary directory, and is deleted before exit.
+Each clone is shallow, goes to a temporary directory, and is deleted before exit.
 
 Examples:
 
 ```shell
 skill-atlas scan https://github.com/anthropics/skills.git
-skill-atlas scan --ref v3.1.0 https://github.com/obra/superpowers.git
+skill-atlas scan 'https://github.com/obra/superpowers.git#v3.1.0'
 skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' https://github.com/anthropics/skills.git
 skill-atlas scan --html https://github.com/anthropics/skills.git
+skill-atlas scan https://github.com/anthropics/skills.git 'https://github.com/obra/superpowers.git#v3.1.0'
 ```
 
 ## Keys
@@ -50,6 +56,7 @@ skill-atlas scan --html https://github.com/anthropics/skills.git
 | `q`, `Ctrl+C` | quit                                                                     |
 
 The HTML page has a filter box that matches the same fields.
+With several repositories, both filters also match the repository name.
 
 ## Spec
 
