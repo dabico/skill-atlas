@@ -76,7 +76,7 @@ func runScan(cmd command, stderr io.Writer) int {
 	if err != nil {
 		return failure(stderr, err)
 	}
-	skills, err := scan.Dir(dir, target.Name)
+	res, err := scan.Dir(dir, target.Name, scan.Options{Exclude: cmd.exclude})
 	if err != nil {
 		return failure(stderr, err)
 	}
@@ -85,17 +85,18 @@ func runScan(cmd command, stderr io.Writer) int {
 	os.RemoveAll(dir)
 	stop()
 	if cmd.html {
-		if err := showHTML(target, checkout, skills, htmlreport.OpenBrowser, stderr); err != nil {
+		if err := showHTML(target, checkout, res.Skills, htmlreport.OpenBrowser, stderr); err != nil {
 			return failure(stderr, err)
 		}
 		return exitOK
 	}
 
 	err = tui.Run(tui.Report{
-		Repo:   target.Display,
-		Ref:    checkout.Ref,
-		SHA:    checkout.SHA,
-		Skills: skills,
+		Repo:     target.Display,
+		Ref:      checkout.Ref,
+		SHA:      checkout.SHA,
+		Skills:   res.Skills,
+		Excluded: res.Excluded,
 	})
 	if err != nil {
 		return failure(stderr, err)

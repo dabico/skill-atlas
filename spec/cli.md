@@ -78,13 +78,15 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 ## Scan command
 
 ```shell
-skill-atlas scan [--html] [--ref <branch|tag>] <git-url>
+skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
 ```
 
 - The first version accepts 1 remote Git URL, over HTTPS or SSH. Local paths aren't supported.
 - Without `--ref`, the scan uses the remote's default branch (`HEAD`).
 - `--ref` takes a branch or tag name. Commit SHAs aren't supported. An unknown ref fails the scan with an error.
 - `--html` writes the results to an HTML file and opens it in the web browser instead of showing the TUI. See [HTML report](#html-report).
+- `--exclude` skips `SKILL.md` files by path. The flag is repeatable.
+- Details are under [Excluded paths](#excluded-paths).
 - Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
 - Clones are shallow (depth 1). The scan doesn't need history.
 - The results show the commit SHA that was scanned.
@@ -95,12 +97,34 @@ skill-atlas scan [--html] [--ref <branch|tag>] <git-url>
 ### Scan scope
 
 The scan walks every tracked file in the clone, except `.git/`.
-There's no ignore list, since a fresh clone only contains tracked files.
+It has no ignore list of its own, since a fresh clone only contains tracked files.
+Only the [excluded paths](#excluded-paths) are skipped.
 
 A `SKILL.md` nested inside another skill's directory is a separate skill.
 
 The scan ignores symlinks, both to files and to directories.
 Each skill appears once, at its real path, and the scan never reads outside the clone.
+
+### Excluded paths
+
+Without `--exclude`, the scan reads every `SKILL.md`.
+
+`--exclude <pattern>` skips the `SKILL.md` files that match a [gitignore](https://git-scm.com/docs/gitignore#_pattern_format) pattern.
+Pass the flag more than once to add patterns. Both `--exclude <pattern>` and `--exclude=<pattern>` work.
+
+- Patterns match the `SKILL.md` path relative to the repository root, with `/` separators.
+- A pattern without `/` matches a name at any depth: `fixtures` matches `a/fixtures/x/SKILL.md`.
+- A pattern with a leading or inner `/` matches from the repository root: `/docs` and `skills/old` match only at the top.
+- `**` matches any number of directories: `**/old`, `skills/**/draft`. It must fill a whole path segment, so `a**b` is an error.
+- A pattern that matches a directory excludes everything below it. A trailing `/` limits the pattern to directories.
+- A leading `!` re-includes paths that an earlier pattern matched. The last matching pattern wins. Unlike git, `!` can re-include a file inside an excluded directory.
+- An empty or malformed pattern is a usage error (exit 2), reported before the clone starts.
+
+Excluded files are counted and never parsed.
+Symlinks and `.git/` stay ignored and aren't counted.
+The TUI shows the count (see [TUI](#tui)).
+
+Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' <git-url>`.
 
 ### State
 
@@ -125,13 +149,13 @@ Split view: skill list on the left, details of the selected skill on the right.
  j/k move · tab focus · / filter · q quit
 ```
 
-- Header: repository URL, ref, short commit SHA, skill count, invalid count.
+- Header: repository URL, ref, short commit SHA, skill count, invalid count. When the scan excluded any `SKILL.md`, the counts also show the excluded count, e.g. `2 skills, 0 invalid, 2 excluded`. Without exclusions the header has no excluded count.
 - List pane: skill `name`, with an `[invalid]` badge on invalid skills.
 - Detail pane: path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields, and validation errors for invalid skills. Below that, the full Markdown body, rendered.
 - <kbd>Tab</kbd> switches focus between the panes. j/k scroll the detail pane while it has focus.
 - <kbd>/</kbd> filters the list by name, description and path. <kbd>Esc</kbd> clears the filter.
 - <kbd>q</kbd> or <kbd>Ctrl+C</kbd> quits.
-- A scan with no skills shows `No skills found` in the list pane.
+- A scan with no skills shows `No skills found` in the list pane. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
 - The list shows the directory name when a skill has no usable `name`.
 - Footer: key hints.
 

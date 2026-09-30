@@ -13,6 +13,8 @@ type Report struct {
 	Ref    string // branch or tag name
 	SHA    string // full commit SHA
 	Skills []skill.Skill
+	// Excluded counts SKILL.md files the scan skipped.
+	Excluded int
 }
 
 // Run shows r until the user quits.

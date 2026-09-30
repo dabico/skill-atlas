@@ -13,12 +13,21 @@ import (
 	"skill-atlas/internal/skill"
 )
 
-// Dir walks root and parses every SKILL.md it finds, sorted by path.
+// Result is the outcome of a scan.
+type Result struct {
+	Skills   []skill.Skill // sorted by path; nil when none were found
+	Excluded int           // SKILL.md files skipped by Options, never parsed
+}
+
+// Dir walks root and parses every SKILL.md that opts don't exclude, sorted by path.
 // rootName is used as the directory name for a SKILL.md at the root.
-// It returns a nil slice when no skills are found.
-func Dir(root, rootName string) ([]skill.Skill, error) {
-	var skills []skill.Skill
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+func Dir(root, rootName string, opts Options) (Result, error) {
+	f, err := newFilter(opts)
+	if err != nil {
+		return Result{}, fmt.Errorf("scan %s: %w", root, err)
+	}
+	var res Result
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -40,18 +49,22 @@ func Dir(root, rootName string) ([]skill.Skill, error) {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if f.excluded(rel) {
+			res.Excluded++
+			return nil
+		}
 		content, err := os.ReadFile(p)
 		if err != nil {
 			return err
 		}
-		skills = append(skills, skill.Parse(rel, dirName(rel, rootName), content))
+		res.Skills = append(res.Skills, skill.Parse(rel, dirName(rel, rootName), content))
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("scan %s: %w", root, err)
+		return Result{}, fmt.Errorf("scan %s: %w", root, err)
 	}
-	slices.SortFunc(skills, func(a, b skill.Skill) int { return strings.Compare(a.Path, b.Path) })
-	return skills, nil
+	slices.SortFunc(res.Skills, func(a, b skill.Skill) int { return strings.Compare(a.Path, b.Path) })
+	return res, nil
 }
 
 // dirName returns the parent directory's base name, or rootName for a root-level file.
