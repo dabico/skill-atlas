@@ -126,7 +126,7 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "duplicate", args: []string{"scan", "--html", "https://x.test/a/b", "https://x.test/a/b.git"}, code: exitUsage, wantErrHas: "x.test/a/b given twice"},
 		{name: "duplicate with ref", args: []string{"scan", "--html", "--ref=v1", "https://x.test/a/b", "https://x.test/a/b#v1"}, code: exitUsage, wantErrHas: "x.test/a/b @ v1 given twice"},
 		{name: "duplicate prints usage", args: []string{"scan", "--html", "https://x.test/a/b", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "Usage:"},
-		{name: "bad url among several", args: []string{"scan", "--html", "https://x.test/a/b", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
+		{name: "bad url among several", args: []string{"scan", "--html", "https://x.test/a/b", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: `skill-atlas: "http://example.com/a/b.git": `},
 		{name: "empty ref", args: []string{"scan", "--ref=", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "--ref"},
 		{name: "empty exclude", args: []string{"scan", "--exclude=", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "--exclude"},
 		{name: "bad exclude glob", args: []string{"scan", "--exclude", "[", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "malformed"},

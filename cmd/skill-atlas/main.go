@@ -50,6 +50,9 @@ func runScan(cmd command, stderr io.Writer) int {
 	for i, r := range cmd.repos {
 		target, err := repo.ParseURL(r.url)
 		if err != nil {
+			if len(cmd.repos) > 1 { // name the bad argument
+				err = fmt.Errorf("%q: %w", r.url, err)
+			}
 			fmt.Fprintf(stderr, "skill-atlas: %v\n", err)
 			return exitFail
 		}
