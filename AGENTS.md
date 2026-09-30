@@ -48,7 +48,7 @@ go test -tags e2e -count=1 -timeout 10m ./e2e/...   # needs tmux
 - Never merge without the maintainer's explicit OK.
 - Never force-push. Resolve conflicts by merging `origin/main` into the branch.
 - After a merge, delete the worktree and branch once the local head matches the PR's final SHA.
-- Don't commit `.idea/`, `bin/`, `README.md` or `memory/` unless asked.
+- Don't commit `.idea/`, `bin/` or `README.md` unless asked. `memory/` follows the Memory rules below.
 
 ## Memory
 
@@ -56,3 +56,4 @@ go test -tags e2e -count=1 -timeout 10m ./e2e/...   # needs tmux
 - Instructions belong in this file. Claude's notes belong in `memory/`.
 - Each memory is 1 file with `name`, `description` and `type` frontmatter (`user`, `feedback`, `project` or `reference`), listed in `memory/MEMORY.md` with a one-line summary.
 - Add 1 file per conversation to `memory/sessions/`, named by date.
+- Memory edits made while working on a feature go in that feature's worktree and are committed with its PR. Leave the main checkout's `memory/` unchanged meanwhile, so the merge doesn't conflict.

@@ -101,4 +101,4 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
 | `--ref` as the default ref for URLs without `#<ref>`     | `#<ref>` on the URL only                          | Maintainer's review of PR #5                                           |
 | Fail-fast: 1 bad repo fails the whole multi-repo scan    | Partial results, exit 1                           | Maintainer's review of PR #5; fail-fast may return as a flag           |
 | Parallel clone limit fixed at 4 (`maxClones`)            | `--parallel N`, default 4                         | Maintainer's review of PR #5                                           |
-| `README.md` and `memory/` left out of feature PRs        | Both committed to PR #5                           | Maintainer's call on PR #5                                             |
+| `README.md` and `memory/` left out of feature PRs        | Memory goes in the feature PR (`AGENTS.md`)       | Maintainer's call on PR #5; README still only when asked               |
