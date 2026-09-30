@@ -137,6 +137,7 @@ nav ul { margin: 0; padding-left: 1.25rem; }
 nav .repohead { font-size: 1rem; color: var(--fg); }
 .repohead code { padding: 0; background: none; }
 .rcount { color: var(--muted); font-size: 0.875rem; font-weight: 400; }
+.fail { color: var(--bad-fg); }
 {{- end}}
 </style>
 </head>
@@ -166,6 +167,8 @@ nav .repohead { font-size: 1rem; color: var(--fg); }
 {{template "tocitem" .}}
 {{- end}}
 </ul>
+{{- else if .Failed}}
+<p class="empty fail">{{.Failed}}</p>
 {{- else}}
 <p class="empty">{{.Empty}}</p>
 {{- end}}
@@ -173,10 +176,10 @@ nav .repohead { font-size: 1rem; color: var(--fg); }
 {{- end}}
 </nav>
 {{- range .Groups}}
-{{- if .Skills}}
+{{- if or .Skills .Failed}}
 <div class="group" data-group>
 <h2 class="repohead">{{template "repohead" .}}</h2>
-{{- range .Skills}}{{template "skill" .}}{{end}}
+{{- if .Failed}}<p class="empty fail">{{.Failed}}</p>{{end}}{{- range .Skills}}{{template "skill" .}}{{end}}
 </div>
 {{- end}}
 {{- end}}

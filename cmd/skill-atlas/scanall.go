@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"strings"
 	"sync"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"skill-atlas/internal/repo"
 	"skill-atlas/internal/scan"
@@ -26,6 +27,7 @@ type scanned struct {
 	source
 	checkout repo.Checkout
 	res      scan.Result
+	err      error // why the clone or scan failed; checkout and res may be empty
 }
 
 type (
@@ -33,29 +35,36 @@ type (
 	scanFunc  func(root, rootName string, opts scan.Options) (scan.Result, error)
 )
 
-// scanAll clones and scans srcs, at most maxClones at a time, each in its own subdirectory of root.
-// The first failure cancels the rest and is returned. Results keep the order of srcs.
-func scanAll(ctx context.Context, srcs []source, root string, opts scan.Options, clone cloneFunc, scanDir scanFunc, progress io.Writer) ([]scanned, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+// shownRef is the resolved ref, or the requested one when the clone failed.
+func (s scanned) shownRef() string {
+	if s.checkout.Ref != "" {
+		return s.checkout.Ref
+	}
+	return s.ref
+}
 
+// label is "display[ @ ref]", the name of a repository in messages.
+func (s source) label() string {
+	if s.ref != "" {
+		return s.target.Display + " @ " + s.ref
+	}
+	return s.target.Display
+}
+
+// scanAll clones and scans srcs, at most maxClones at a time, each in its own subdirectory of root.
+// A failing repository is recorded in its result and doesn't stop the others. With several
+// repositories each failure is printed to progress as it happens. Results keep the order of srcs.
+// The error is non-nil only when ctx is cancelled.
+func scanAll(ctx context.Context, srcs []source, root string, opts scan.Options, clone cloneFunc, scanDir scanFunc, progress io.Writer) ([]scanned, error) {
 	out := make([]scanned, len(srcs))
 	sem := make(chan struct{}, maxClones)
 	var (
-		wg       sync.WaitGroup
-		mu       sync.Mutex
-		firstErr error
+		wg sync.WaitGroup
+		mu sync.Mutex
 	)
-	fail := func(err error) {
-		mu.Lock()
-		defer mu.Unlock()
-		if firstErr == nil {
-			firstErr = err
-			cancel()
-		}
-	}
 
 	for i, s := range srcs {
+		out[i].source = s
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -63,43 +72,36 @@ func scanAll(ctx context.Context, srcs []source, root string, opts scan.Options,
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-ctx.Done():
-				fail(ctx.Err())
 				return
 			}
 
 			if ctx.Err() != nil { // select may pick the semaphore over a closed Done
-				fail(ctx.Err())
 				return
 			}
 
 			mu.Lock()
-			if s.ref != "" {
-				fmt.Fprintf(progress, "Cloning %s @ %s…\n", s.target.Display, s.ref)
-			} else {
-				fmt.Fprintf(progress, "Cloning %s…\n", s.target.Display)
-			}
+			fmt.Fprintf(progress, "Cloning %s…\n", s.label())
 			mu.Unlock()
 
 			dir := filepath.Join(root, fmt.Sprintf("repo-%d", i))
 			checkout, err := clone(ctx, s.target, s.ref, dir)
-			var res scan.Result
 			if err == nil {
-				res, err = scanDir(dir, s.target.Name, opts)
+				out[i].checkout = checkout
+				out[i].res, err = scanDir(dir, s.target.Name, opts)
 			}
 			if err != nil {
-				// Name the repository unless the error already does.
-				if len(srcs) > 1 && ctx.Err() == nil && !strings.Contains(err.Error(), s.target.Display) {
-					err = fmt.Errorf("%s: %w", s.target.Display, err)
+				out[i].err = err
+				if len(srcs) > 1 && ctx.Err() == nil {
+					mu.Lock()
+					fmt.Fprintf(progress, "skill-atlas: %s: %s\n", s.label(), ansi.Strip(err.Error()))
+					mu.Unlock()
 				}
-				fail(err)
-				return
 			}
-			out[i] = scanned{source: s, checkout: checkout, res: res}
 		}()
 	}
 	wg.Wait()
-	if firstErr != nil {
-		return nil, firstErr
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

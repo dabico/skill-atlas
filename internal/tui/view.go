@@ -58,6 +58,9 @@ func (m *model) header() string {
 	if excluded > 0 {
 		right += fmt.Sprintf(", %d excluded", excluded)
 	}
+	if m.failed > 0 {
+		right += fmt.Sprintf(", %d failed", m.failed)
+	}
 	right += " "
 
 	rw := ansi.StringWidth(right)
@@ -131,11 +134,18 @@ func (m *model) listLines() []string {
 			lines = append(lines, boldStyle.Render(ansi.Truncate(m.report.Repos[r.repo].label(), w, "…")))
 		case rowEmpty:
 			lines = append(lines, dimStyle.Render(ansi.Truncate("  "+noSkills(m.report.Repos[r.repo].Excluded), w, "…")))
+		case rowError:
+			lines = append(lines, warnStyle.Render(ansi.Truncate("  "+errorText(m.report.Repos[r.repo].Err), w, "…")))
 		default:
 			lines = append(lines, m.row(r.pos, w))
 		}
 	}
 	return lines
+}
+
+// errorText makes a failure message safe for one row: no escape sequences, one line.
+func errorText(err string) string {
+	return strings.Join(strings.Fields(ansi.Strip(err)), " ")
 }
 
 // noSkills is the message for a repository with no skills.

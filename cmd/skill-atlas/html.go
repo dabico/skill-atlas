@@ -13,10 +13,13 @@ func showHTML(results []scanned, open func(url string) error, stderr io.Writer) 
 	for i, r := range results {
 		report.Repos[i] = htmlreport.Repo{
 			Name:     r.target.Display,
-			Ref:      r.checkout.Ref,
+			Ref:      r.shownRef(),
 			SHA:      r.checkout.SHA,
 			Skills:   r.res.Skills,
 			Excluded: r.res.Excluded,
+		}
+		if r.err != nil {
+			report.Repos[i].Err = r.err.Error()
 		}
 	}
 	page, err := htmlreport.Render(report)

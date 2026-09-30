@@ -24,6 +24,8 @@ type Repo struct {
 	Skills []skill.Skill
 	// Excluded counts SKILL.md files the scan skipped.
 	Excluded int
+	// Err is why the clone or scan failed; it may contain remote text. Empty when the repository was scanned.
+	Err string
 }
 
 // Report is everything the page shows. Built in memory after the scan.
@@ -62,6 +64,7 @@ type groupData struct {
 	Name, Ref, SHA, ShortSHA string
 	Summary                  string
 	Empty                    string
+	Failed                   string // failure message, when the repository failed
 	Skills                   []skillData
 }
 
@@ -96,7 +99,7 @@ func Render(r Report) ([]byte, error) {
 		data.ShortSHA = shortSHA(data.SHA)
 	}
 
-	var total, invalidTotal, excludedTotal int
+	var total, invalidTotal, excludedTotal, failed int
 	for ri, repo := range r.Repos {
 		g := groupData{Name: repo.Name, Ref: repo.Ref, SHA: repo.SHA, ShortSHA: shortSHA(repo.SHA)}
 		invalid := 0
@@ -127,6 +130,11 @@ func Render(r Report) ([]byte, error) {
 			})
 		}
 		g.Summary, g.Empty = summary(len(repo.Skills), invalid, repo.Excluded)
+		if repo.Err != "" {
+			failed++
+			g.Summary, g.Failed = "failed", errorText(repo.Err)
+			g.Empty = g.Failed
+		}
 		total += len(repo.Skills)
 		invalidTotal += invalid
 		excludedTotal += repo.Excluded
@@ -137,6 +145,12 @@ func Render(r Report) ([]byte, error) {
 		}
 	}
 	data.Summary, data.Empty = summary(total, invalidTotal, excludedTotal)
+	if failed > 0 {
+		data.Summary += fmt.Sprintf(", %d failed", failed)
+	}
+	if !data.Multi && len(r.Repos) == 1 && r.Repos[0].Err != "" {
+		data.Empty = errorText(r.Repos[0].Err)
+	}
 	if total > 0 {
 		data.Script = template.JS(filterScript)
 	}
@@ -194,4 +208,9 @@ func extensionFields(exts []skill.Extension) []field {
 		out[i].Sub = append(out[i].Sub, skill.MetadataEntry{Key: ansi.Strip(e.Key), Value: ansi.Strip(e.Value)})
 	}
 	return out
+}
+
+// errorText makes a failure message plain text on one line: no escape sequences.
+func errorText(err string) string {
+	return strings.Join(strings.Fields(ansi.Strip(err)), " ")
 }

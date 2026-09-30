@@ -28,7 +28,21 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
+// deps are the parts of a scan that tests replace.
+type deps struct {
+	clone   cloneFunc
+	scanDir scanFunc
+	open    func(url string) error
+	showTUI func(tui.Report) error
+}
+
+var realDeps = deps{clone: repo.Clone, scanDir: scan.Dir, open: htmlreport.OpenBrowser, showTUI: tui.Run}
+
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWith(realDeps, args, stdout, stderr)
+}
+
+func runWith(d deps, args []string, stdout, stderr io.Writer) int {
 	cmd, err := parseArgs(args)
 	if err != nil {
 		var ue *usageError
@@ -42,10 +56,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, usageText)
 		return exitOK
 	}
-	return runScan(cmd, stderr)
+	return runScan(d, cmd, stderr)
 }
 
-func runScan(cmd command, stderr io.Writer) int {
+func runScan(d deps, cmd command, stderr io.Writer) int {
 	srcs := make([]source, len(cmd.repos))
 	for i, r := range cmd.repos {
 		target, err := repo.ParseURL(r.url)
@@ -77,35 +91,56 @@ func runScan(cmd command, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	results, err := scanAll(ctx, srcs, dir, scan.Options{Exclude: cmd.exclude}, repo.Clone, scan.Dir, stderr)
+	results, err := scanAll(ctx, srcs, dir, scan.Options{Exclude: cmd.exclude}, d.clone, d.scanDir, stderr)
 	if err != nil {
 		return failure(stderr, err)
+	}
+	failed := 0
+	for _, r := range results {
+		if r.err != nil {
+			failed++
+		}
+	}
+	if failed == len(results) {
+		// With several repositories scanAll already printed each failure.
+		if len(results) == 1 {
+			return failure(stderr, results[0].err)
+		}
+		return exitFail
 	}
 
 	// Results are in memory; drop the clones and release Ctrl+C.
 	os.RemoveAll(dir)
 	stop()
+	// Some repositories failed: show the rest, then exit 1.
+	code := exitOK
+	if failed > 0 {
+		code = exitFail
+	}
 	if cmd.html {
-		if err := showHTML(results, htmlreport.OpenBrowser, stderr); err != nil {
+		if err := showHTML(results, d.open, stderr); err != nil {
 			return failure(stderr, err)
 		}
-		return exitOK
+		return code
 	}
 
 	report := tui.Report{Repos: make([]tui.Repo, len(results))}
 	for i, r := range results {
 		report.Repos[i] = tui.Repo{
 			Name:     r.target.Display,
-			Ref:      r.checkout.Ref,
+			Ref:      r.shownRef(),
 			SHA:      r.checkout.SHA,
 			Skills:   r.res.Skills,
 			Excluded: r.res.Excluded,
 		}
+		if r.err != nil {
+			report.Repos[i].Err = r.err.Error()
+		}
 	}
-	if err := tui.Run(report); err != nil {
+	if err := d.showTUI(report); err != nil {
 		return failure(stderr, err)
 	}
-	return exitOK
+	return code
 }
 
 // duplicate returns an error message for the first repository given twice with the same ref, or "".

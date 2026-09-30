@@ -95,17 +95,105 @@ func TestTUIMultiRepo(t *testing.T) {
 	s.assertTmpClean()
 }
 
-func TestTUIMultiRepoFailsFast(t *testing.T) {
+const (
+	badURL     = "https://github.com/JetBrains/this-repo-does-not-exist-e2e.git"
+	badDisplay = "github.com/JetBrains/this-repo-does-not-exist-e2e"
+	badError   = "authentication failed for " + badDisplay
+)
+
+// ideavimTotals returns the skill and invalid counts of the ideavim golden file.
+func ideavimTotals(t *testing.T) (skills, invalid int) {
+	t.Helper()
+	for _, g := range readGolden(t, ideavim.golden) {
+		skills++
+		if !g.Valid {
+			invalid++
+		}
+	}
+	return skills, invalid
+}
+
+func TestTUIPartialFailure(t *testing.T) {
 	t.Parallel()
-	bad := "https://github.com/JetBrains/this-repo-does-not-exist-e2e.git"
-	s := startScan(t, ideavim.url+"#"+ideavim.tag, bad)
+	skills, invalid := ideavimTotals(t)
+	s := startScan(t, ideavim.url+"#"+ideavim.tag, badURL)
+
+	header := regexp.MustCompile(`2 repositories\s+` + fmt.Sprintf("%d skills, %d invalid, 1 failed", skills, invalid))
+	pane := s.waitFor(header, cloneWait)
+	if !strings.Contains(leftPane(pane), ideavim.display) || !strings.Contains(leftPane(pane), badDisplay[:30]) { // the list pane cuts long headings
+		t.Errorf("list lacks a group heading:\n%s", pane)
+	}
+	// The list pane is narrow, so the error row shows the start of the message.
+	if !strings.Contains(leftPane(pane), "authentication failed for") {
+		t.Errorf("list lacks the error row:\n%s", pane)
+	}
+
+	// G can't reach the failed repository's rows: the last skill of ideavim stays selected.
+	s.keys("G")
+	golden := readGolden(t, ideavim.golden)
+	s.waitFor(regexp.MustCompile(regexp.QuoteMeta(golden[len(golden)-1].Path)), shortWait)
+
+	s.keys("q")
+	if code := s.waitExit(shortWait); code != 1 {
+		t.Errorf("exit code = %d, want 1\n%s", code, s.last)
+	}
+	s.assertTmpClean()
+}
+
+func TestTUIAllReposFail(t *testing.T) {
+	t.Parallel()
+	s := startScan(t, badURL+"#no-such-ref-e2e", badURL)
 	if code := s.waitExit(2 * cloneWait); code != 1 {
 		t.Errorf("exit code = %d, want 1\n%s", code, s.last)
 	}
-	if !strings.Contains(s.last, "skill-atlas: ") || !strings.Contains(s.last, "this-repo-does-not-exist-e2e") {
-		t.Errorf("pane doesn't name the failing repository:\n%s", s.last)
+	if !strings.Contains(s.last, "skill-atlas: "+badDisplay+" @ no-such-ref-e2e: ") || strings.Contains(s.last, "repositories") {
+		t.Errorf("pane lacks the failure line, or the TUI started:\n%s", s.last)
 	}
 	s.assertTmpClean()
+}
+
+func TestHTMLPartialFailure(t *testing.T) {
+	t.Parallel()
+	skills, invalid := ideavimTotals(t)
+	r := runHTML(t, requireTool(t, "true"), nil, ideavim.url+"#"+ideavim.tag, badURL)
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr:\n%s", r.code, r.stderr)
+	}
+	if want := "skill-atlas: " + badDisplay + ": " + badError; !strings.Contains(r.stderr, want) {
+		t.Errorf("stderr lacks %q:\n%s", want, r.stderr)
+	}
+	path := r.reportPath(t)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+	for _, w := range []string{
+		"<h1>2 repositories</h1>",
+		fmt.Sprintf(">%d skills, %d invalid, 1 failed<", skills, invalid),
+		badDisplay,
+		badError,
+	} {
+		if !strings.Contains(page, w) {
+			t.Errorf("report lacks %q", w)
+		}
+	}
+	checkScriptPinned(t, page)
+	assertOnlyReport(t, r.tmpDir, path)
+}
+
+func TestHTMLAllReposFail(t *testing.T) {
+	t.Parallel()
+	r := runHTML(t, requireTool(t, "true"), nil, badURL+"#no-such-ref-e2e", badURL)
+	if r.code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr:\n%s", r.code, r.stderr)
+	}
+	if reportLine.MatchString(r.stderr) {
+		t.Errorf("a report was written:\n%s", r.stderr)
+	}
+	if entries, _ := os.ReadDir(r.tmpDir); len(entries) != 0 {
+		t.Errorf("TMPDIR holds %d entries, want none", len(entries))
+	}
 }
 
 func TestHTMLMultiRepo(t *testing.T) {

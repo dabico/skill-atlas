@@ -107,103 +107,155 @@ func TestScanAllProgressAndOptions(t *testing.T) {
 	}
 }
 
-func TestScanAllFailFast(t *testing.T) {
+// One repository fails while its siblings, already running, finish and return results.
+func TestScanAllPartialResults(t *testing.T) {
 	srcs := sources(3)
 	boom := errors.New("boom")
-	var canceled atomic.Int32
-	var running sync.WaitGroup
-	running.Add(2)
+	failing := make(chan struct{})
 	clone := func(ctx context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
 		if tg.Name == "r1" {
-			running.Wait() // fail only once both siblings are cloning
+			close(failing)
 			return repo.Checkout{}, boom
 		}
-		running.Done()
-		select {
-		case <-ctx.Done():
-			canceled.Add(1)
-			return repo.Checkout{}, ctx.Err()
-		case <-time.After(5 * time.Second):
-			return repo.Checkout{}, nil
+		<-failing // finish only after the failure started
+		if err := ctx.Err(); err != nil {
+			return repo.Checkout{}, err
+		}
+		return repo.Checkout{SHA: tg.Name}, nil
+	}
+	got, err := scanAll(context.Background(), srcs, t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("err = %v, want nil: a repository failure isn't a scan failure", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("%d results, want 3", len(got))
+	}
+	for _, i := range []int{0, 2} {
+		if got[i].err != nil || got[i].checkout.SHA != srcs[i].target.Name || len(got[i].res.Skills) != 1 {
+			t.Errorf("result %d = %+v, want the finished scan", i, got[i])
 		}
 	}
-	start := time.Now()
-	got, err := scanAll(context.Background(), srcs, t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{})
-	if got != nil || !errors.Is(err, boom) {
-		t.Fatalf("got %v, %v; want the first failure", got, err)
-	}
-	if !strings.HasPrefix(err.Error(), "h/o/r1: ") {
-		t.Errorf("error %q doesn't name the repository", err)
-	}
-	if errors.Is(err, context.Canceled) {
-		t.Error("a cancelled sibling replaced the real failure")
-	}
-	if time.Since(start) > 2*time.Second || canceled.Load() != 2 {
-		t.Errorf("others weren't cancelled (took %v, %d cancelled)", time.Since(start), canceled.Load())
+	if !errors.Is(got[1].err, boom) || len(got[1].res.Skills) != 0 {
+		t.Errorf("result 1 = %+v, want the failure", got[1])
 	}
 }
 
-func TestScanAllQueuedReposSkippedAfterFailure(t *testing.T) {
+// Repositories still queued when another fails are cloned anyway.
+func TestScanAllQueuedReposStillRunAfterFailure(t *testing.T) {
 	var started atomic.Int32
-	clone := func(ctx context.Context, _ repo.Target, _, _ string) (repo.Checkout, error) {
+	clone := func(context.Context, repo.Target, string, string) (repo.Checkout, error) {
 		if started.Add(1) == 1 {
 			return repo.Checkout{}, errors.New("boom")
 		}
-		<-ctx.Done()
-		return repo.Checkout{}, ctx.Err()
+		return repo.Checkout{}, nil
 	}
-	if _, err := scanAll(context.Background(), sources(12), t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{}); err == nil {
-		t.Fatal("no error")
+	got, err := scanAll(context.Background(), sources(12), t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if n := started.Load(); n > maxClones {
-		t.Errorf("%d clones started, want the queue to stop after the failure", n)
+	if n := started.Load(); n != 12 {
+		t.Errorf("%d clones started, want all 12", n)
 	}
-}
-
-func TestScanAllScanFailureNamesRepo(t *testing.T) {
-	clone := func(context.Context, repo.Target, string, string) (repo.Checkout, error) { return repo.Checkout{}, nil }
-	bad := func(_, name string, _ scan.Options) (scan.Result, error) {
-		if name == "r1" {
-			return scan.Result{}, errors.New("walk failed")
+	failed := 0
+	for _, g := range got {
+		if g.err != nil {
+			failed++
 		}
-		return scan.Result{}, nil
 	}
-	_, err := scanAll(context.Background(), sources(2), t.TempDir(), scan.Options{}, clone, bad, &bytes.Buffer{})
-	if err == nil || err.Error() != "h/o/r1: walk failed" {
-		t.Errorf("err = %v", err)
+	if failed != 1 {
+		t.Errorf("%d failed, want 1", failed)
 	}
 }
 
-func TestScanAllErrorNaming(t *testing.T) {
-	named := func(_ context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
-		return repo.Checkout{}, fmt.Errorf("repository %s not found", tg.Display)
+// Each error stays on its own repository, in command-line order.
+func TestScanAllErrorsStayWithTheirRepo(t *testing.T) {
+	clone := func(_ context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
+		if tg.Name == "r0" || tg.Name == "r3" {
+			return repo.Checkout{}, fmt.Errorf("clone %s failed", tg.Name)
+		}
+		return repo.Checkout{}, nil
 	}
-	_, err := scanAll(context.Background(), sources(2), t.TempDir(), scan.Options{}, named, okScan, &bytes.Buffer{})
-	if err == nil || !strings.HasPrefix(err.Error(), "repository h/o/r") {
-		t.Errorf("an error that names the repository was wrapped: %v", err)
+	scanDir := func(_, name string, o scan.Options) (scan.Result, error) {
+		if name == "r4" {
+			return scan.Result{}, errors.New("walk r4 failed")
+		}
+		return okScan("", name, o)
 	}
-	// A single repository keeps today's message.
-	plain := func(context.Context, repo.Target, string, string) (repo.Checkout, error) {
+	got, err := scanAll(context.Background(), sources(6), t.TempDir(), scan.Options{}, clone, scanDir, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"clone r0 failed", "", "", "clone r3 failed", "walk r4 failed", ""}
+	for i, g := range got {
+		if g.target.Name != fmt.Sprintf("r%d", i) {
+			t.Errorf("result %d is %s, want r%d", i, g.target.Name, i)
+		}
+		switch {
+		case want[i] == "" && g.err != nil:
+			t.Errorf("r%d: unexpected error %v", i, g.err)
+		case want[i] != "" && (g.err == nil || g.err.Error() != want[i]):
+			t.Errorf("r%d: err = %v, want %q", i, g.err, want[i])
+		}
+	}
+}
+
+func TestScanAllPrintsFailures(t *testing.T) {
+	srcs := sources(3)
+	srcs[1].ref = "v1"
+	clone := func(_ context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
+		if tg.Name == "r1" {
+			return repo.Checkout{}, errors.New("ref \"v1\" not found\x1b[31m")
+		}
+		return repo.Checkout{}, nil
+	}
+	var progress bytes.Buffer
+	if _, err := scanAll(context.Background(), srcs, t.TempDir(), scan.Options{}, clone, okScan, &progress); err != nil {
+		t.Fatal(err)
+	}
+	if want := "skill-atlas: h/o/r1 @ v1: ref \"v1\" not found\n"; !strings.Contains(progress.String(), want) {
+		t.Errorf("progress %q lacks %q (escape sequences must be stripped)", progress.String(), want)
+	}
+	if n := strings.Count(progress.String(), "skill-atlas: "); n != 1 {
+		t.Errorf("%d failure lines, want 1", n)
+	}
+}
+
+// With 1 repository scanAll prints nothing itself; the caller reports the error.
+func TestScanAllSingleRepoPrintsNoFailure(t *testing.T) {
+	clone := func(context.Context, repo.Target, string, string) (repo.Checkout, error) {
 		return repo.Checkout{}, errors.New("nope")
 	}
-	_, err = scanAll(context.Background(), sources(1), t.TempDir(), scan.Options{}, plain, okScan, &bytes.Buffer{})
-	if err == nil || err.Error() != "nope" {
-		t.Errorf("single-repo error = %v, want it unchanged", err)
+	var progress bytes.Buffer
+	got, err := scanAll(context.Background(), sources(1), t.TempDir(), scan.Options{}, clone, okScan, &progress)
+	if err != nil || len(got) != 1 || got[0].err == nil || got[0].err.Error() != "nope" {
+		t.Fatalf("got %+v, %v; want the error unchanged on the result", got, err)
+	}
+	if strings.Contains(progress.String(), "skill-atlas:") {
+		t.Errorf("progress %q has a failure line", progress.String())
 	}
 }
 
 func TestScanAllInterrupted(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	var started atomic.Int32
+	var progress bytes.Buffer
 	clone := func(ctx context.Context, _ repo.Target, _, _ string) (repo.Checkout, error) {
+		started.Add(1)
 		cancel()
 		<-ctx.Done()
 		return repo.Checkout{}, fmt.Errorf("clone x: %w", ctx.Err())
 	}
-	_, err := scanAll(ctx, sources(6), t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled", err)
+	got, err := scanAll(ctx, sources(6), t.TempDir(), scan.Options{}, clone, okScan, &progress)
+	if !errors.Is(err, context.Canceled) || got != nil {
+		t.Fatalf("got %v, %v; want context.Canceled and no results", got, err)
 	}
 	if code := failure(&bytes.Buffer{}, err); code != exitInterrupted {
 		t.Errorf("exit = %d, want %d", code, exitInterrupted)
+	}
+	if n := started.Load(); n > maxClones {
+		t.Errorf("%d clones started, want at most %d", n, maxClones)
+	}
+	if strings.Contains(progress.String(), "skill-atlas:") {
+		t.Errorf("progress %q reports cancelled clones as failures", progress.String())
 	}
 }

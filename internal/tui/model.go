@@ -28,6 +28,7 @@ const (
 	rowSkill rowKind = iota
 	rowHeading
 	rowEmpty // "No skills found" under the heading of a repository with no skills
+	rowError // the failure message under the heading of a repository that failed
 )
 
 type listRow struct {
@@ -42,6 +43,7 @@ type model struct {
 	repoOf  []int         // repository index of each entry in skills
 	multi   bool          // 2 or more repositories
 	invalid int
+	failed  int // repositories that failed
 
 	visible []int     // indices into skills that match the filter
 	cursor  int       // position within visible
@@ -69,6 +71,9 @@ func newModel(r Report) *model {
 	}
 	m.multi = len(r.Repos) > 1
 	for i, repo := range r.Repos {
+		if repo.Err != "" {
+			m.failed++
+		}
 		for _, s := range repo.Skills {
 			m.skills = append(m.skills, s)
 			m.repoOf = append(m.repoOf, i)
@@ -270,6 +275,8 @@ func (m *model) buildRows() {
 				m.rowOf = append(m.rowOf, len(m.rows))
 				m.rows = append(m.rows, listRow{kind: rowSkill, repo: r, pos: p})
 			}
+		case repo.Err != "" && m.filter == "":
+			m.rows = append(m.rows, listRow{kind: rowHeading, repo: r}, listRow{kind: rowError, repo: r})
 		case len(repo.Skills) == 0 && m.filter == "":
 			m.rows = append(m.rows, listRow{kind: rowHeading, repo: r}, listRow{kind: rowEmpty, repo: r})
 		}

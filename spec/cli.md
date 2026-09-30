@@ -115,7 +115,10 @@ skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]...
 - Commit SHAs aren't supported. An unknown ref fails the scan with an error.
 - The same repository can appear more than once with different refs. The same repository with the same ref twice is a usage error (exit 2): `github.com/org/repo given twice`, or `github.com/org/repo @ v1 given twice` when a ref is set. The check compares the short form shown in the results, so `https://github.com/org/repo` and `git@github.com:org/repo.git` count as the same repository. It runs after the URLs are parsed. A URL that doesn't parse is an exit 1 error. With several URLs, that error starts with the bad URL.
 - With several URLs the tool clones up to 4 repositories at the same time and prints `Cloning <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.
-- The first clone or scan failure cancels the other clones and fails the whole scan (exit 1). The error names the repository.
+- With several URLs, a repository that fails to clone or scan doesn't stop the others. The tool records the failure for that repository and prints `skill-atlas: <repo>[ @ <ref>]: <error>` to stderr as it happens, before the TUI or report starts. Escape sequences in the error text are removed.
+- When some repositories fail, the TUI or the report shows all of them in command-line order, with the failed ones marked. The tool then exits 1, after the TUI quits or the report opens, so scripts can tell that the result is incomplete.
+- When every repository fails, the tool exits 1 and shows no TUI and writes no report file.
+- With 1 URL, a failure prints `skill-atlas: <error>` without the repository prefix and exits 1.
 - In zsh with `extendedglob`, `#` starts a pattern, so quote a URL that has a ref: `'https://github.com/org/repo#v1'`.
 - `--html` writes the results to an HTML file and opens it in the web browser instead of showing the TUI. See [HTML report](#html-report).
 - `--exclude` skips `SKILL.md` files by path. The flag is repeatable and applies to every repository.
@@ -206,10 +209,11 @@ This is the layout for 1 repository. See [Several repositories](#several-reposit
 └──────────────────────────┴───────────────────────────────────────┘
 ```
 
-- Header: `N repositories` on the left, bold. On the right, the totals over all repositories: `N skills, M invalid`, plus `, K excluded` when any repository excluded files.
+- Header: `N repositories` on the left, bold. On the right, the totals over all repositories: `N skills, M invalid`, plus `, K excluded` when any repository excluded files and `, Z failed` when Z repositories failed, e.g. `15 skills, 2 invalid, 1 failed`.
 - The list is grouped by repository, in command-line order. Each group starts with a heading row, `<repo> @ <ref> (<short sha>)`. Headings can't be selected. The cursor skips them.
 - When the cursor is on the first skill of a group, the list scrolls to show the heading too, if it fits.
 - A repository with no skills shows its heading and a dim `No skills found` row. With exclusions the row reads `No skills found (2 excluded)`. The row isn't shown while a filter is active.
+- A repository that failed shows its heading and, under it, a row with the error message in the warning style, e.g. `authentication failed for github.com/org/b`. The heading has no `(<short sha>)` when the clone did not finish. The error row can't be selected and the cursor skips it. Like the `No skills found` row it is not shown while a filter is active. A message longer than the list pane is cut with `…`. The full message is on stderr. Escape sequences in it are removed.
 - The filter also matches the repository name. A heading shows only while a skill in its group matches. `Skills N/M` counts skills only.
 - The first line of the detail pane is the dim repository label, then the skill path.
 - The minimum terminal size stays 60x12.
@@ -233,6 +237,8 @@ The page has the same information as the TUI:
 - The `<h1>` reads `N repositories`, followed by the totals line. There is no single ref or SHA line.
 - Contents are grouped by repository. Each group has a heading with the repository name, ref, short SHA (the full SHA is the hover text) and its own counts, e.g. `2 skills, 1 invalid, 1 excluded`.
 - A repository with no skills shows `No skills found` (or `No skills found (2 excluded)`) in the contents. It has no skill sections.
+- A repository that failed shows in the contents and as a section group, each with the heading (`failed` in place of the counts) and the error message as a note. The heading has no short SHA when the clone did not finish. Like the empty-repository note, the note hides while a filter is active. The message is escaped and has no escape sequences.
+- The totals line ends with `, Z failed` when Z repositories failed.
 - Skill sections sit under a heading per repository. Section ids are `repo-<R>-skill-<N>`, counted from 1. With 1 repository the ids stay `skill-<N>`.
 - Heading levels nest: the page title is `h1`, repository headings are `h2` and skill names `h3`. Headings in a body keep the same offset below the skill name as with 1 repository. Levels stop at `h6`.
 - The filter also matches the repository name. A repository group hides when none of its skills match. `Skills N/M` counts the skills in all repositories.
@@ -282,6 +288,6 @@ After the scan, and after the tool deletes the clone, it writes the page to a ne
 ### Exit codes
 
 - 0: the tool wrote the report and launched the browser, or warned that the launch failed.
-- 1: the scan failed (any one repository failing counts), or the tool couldn't write the report file.
+- 1: a repository failed to clone or scan, or the tool couldn't write the report file. With several repositories, the tool still shows the ones that worked (TUI or report) and exits 1 afterwards. If every repository failed, there is no TUI and no report file.
 - 2: usage error, including the same repository and ref given twice.
 - 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM` during the clones.
