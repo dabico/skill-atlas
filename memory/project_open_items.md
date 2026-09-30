@@ -10,7 +10,7 @@ Last updated 2026-09-30. `main` is at `cb297dc`: PRs #1 to #5 merged. Between #4
 
 ## Open PRs
 
-- In progress: `feature/html-screenshots`, Playwright screenshot tests for the HTML report. Worktree `.claude/worktrees/html-screenshots`. No PR yet.
+- PR #6 `feature/html-screenshots`: Playwright screenshot tests for the HTML report. Worktree `.claude/worktrees/html-screenshots`. Waiting for CI and review. CI's native amd64 run is the first outside emulation.
 - The PR #5 demo page is unpublished: `docs/demo/multi-repo/index.html` in the main checkout, ignored by git. The Artifact publish failed: this machine authenticates with `apiKeyHelper`, and Artifacts need a claude.ai login.
 
 ## Known bugs
