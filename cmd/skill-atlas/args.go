@@ -18,7 +18,7 @@ Arguments:
   <git-url>[#<ref>]    repository to scan; #<ref> picks a branch or tag (default: remote's default branch)
 
 Flags:
-  --html              open the results as an HTML file in the web browser instead of the TUI
+  --html               open the results as an HTML file in the web browser instead of the TUI
   --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
   --parallel <n>       clone at most n repositories at once (default: 4, minimum: 1)
   -h, --help           show this help
