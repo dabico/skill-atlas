@@ -16,7 +16,7 @@ ref=${DEMO_REF:-zoom@1.0.1}
 out=${DEMO_OUT:-$root/docs/demo}
 query=${DEMO_QUERY:-laconic}
 # DEMO_ARGS replaces the scan arguments, e.g. several URLs; split on spaces.
-if [[ -n ${DEMO_ARGS:-} ]]; then read -ra scan_args <<<"$DEMO_ARGS"; else scan_args=(--ref "$ref" "$url"); fi
+if [[ -n ${DEMO_ARGS:-} ]]; then read -ra scan_args <<<"$DEMO_ARGS"; else scan_args=("$url#$ref"); fi
 
 need() { command -v "$1" >/dev/null || { echo "demo.sh: $1 not found. $2" >&2; exit 1; }; }
 need go "Install Go."

@@ -33,32 +33,23 @@ func TestParseArgs(t *testing.T) {
 		{name: "url only", args: []string{"scan", u}, want: command{action: actionScan, repos: one(u, "")}},
 		{name: "html before url", args: []string{"scan", "--html", u}, want: command{action: actionScan, repos: one(u, ""), html: true}},
 		{name: "html after url", args: []string{"scan", u, "--html"}, want: command{action: actionScan, repos: one(u, ""), html: true}},
-		{name: "html with ref", args: []string{"scan", "--html", "--ref", "v1", u}, want: command{action: actionScan, repos: one(u, "v1"), html: true}},
-		{name: "ref then html", args: []string{"scan", "--ref=v1", u, "--html"}, want: command{action: actionScan, repos: one(u, "v1"), html: true}},
 		{name: "html false", args: []string{"scan", "--html=false", u}, want: command{action: actionScan, repos: one(u, "")}},
 		{name: "html needs url", args: []string{"scan", "--html"}, wantErr: "needs a git url", usage: true},
 		{name: "html takes no value", args: []string{"scan", "--html=maybe", u}, wantErr: "html", usage: true},
-		{name: "flag before url", args: []string{"scan", "--ref", "v1", u}, want: command{action: actionScan, repos: one(u, "v1")}},
-		{name: "flag after url", args: []string{"scan", u, "--ref", "v1"}, want: command{action: actionScan, repos: one(u, "v1")}},
-		{name: "ref equals", args: []string{"scan", "--ref=x", u}, want: command{action: actionScan, repos: one(u, "x")}},
-		{name: "ref equals after url", args: []string{"scan", u, "--ref=x"}, want: command{action: actionScan, repos: one(u, "x")}},
 		{name: "missing url", args: []string{"scan"}, wantErr: "needs a git url", usage: true},
-		{name: "missing url with ref", args: []string{"scan", "--ref", "x"}, wantErr: "needs a git url", usage: true},
 		{name: "two urls", args: []string{"scan", u, v}, want: command{action: actionScan, repos: []repoArg{{url: u}, {url: v}}}},
-		{name: "flags between urls", args: []string{"scan", "--html", u, "--exclude", "a", v, "--ref=x"},
-			want: command{action: actionScan, repos: []repoArg{{url: u, ref: "x"}, {url: v, ref: "x"}}, html: true, exclude: []string{"a"}}},
+		{name: "flags between urls", args: []string{"scan", "--html", u, "--exclude", "a", v},
+			want: command{action: actionScan, repos: []repoArg{{url: u}, {url: v}}, html: true, exclude: []string{"a"}}},
 		{name: "hash ref", args: []string{"scan", u + "#v1"}, want: command{action: actionScan, repos: one(u, "v1")}},
-		{name: "hash ref wins over --ref", args: []string{"scan", "--ref", "main", u + "#v1", v},
-			want: command{action: actionScan, repos: []repoArg{{url: u, ref: "v1"}, {url: v, ref: "main"}}}},
 		{name: "hash ref splits on first hash", args: []string{"scan", u + "#zoom@1.0.1#x"}, want: command{action: actionScan, repos: one(u, "zoom@1.0.1#x")}},
 		{name: "same repo two refs", args: []string{"scan", u + "#a", u + "#b"},
 			want: command{action: actionScan, repos: []repoArg{{url: u, ref: "a"}, {url: u, ref: "b"}}}},
 		{name: "empty hash ref", args: []string{"scan", u + "#"}, wantErr: "missing branch or tag after #", usage: true},
 		{name: "empty hash ref among valid", args: []string{"scan", u + "#a", v + "#"}, wantErr: "missing branch or tag after #", usage: true},
 		{name: "unknown command", args: []string{"x"}, wantErr: `unknown command "x"`, usage: true},
-		{name: "empty ref", args: []string{"scan", "--ref", "", u}, wantErr: "--ref", usage: true},
-		{name: "empty ref equals", args: []string{"scan", u, "--ref="}, wantErr: "--ref", usage: true},
 		{name: "unknown flag", args: []string{"scan", "--nope", u}, wantErr: "nope", usage: true},
+		{name: "--ref is unknown", args: []string{"scan", "--ref", "v1", u}, wantErr: "ref", usage: true},
+		{name: "--ref= is unknown", args: []string{"scan", "--ref=v1", u}, wantErr: "ref", usage: true},
 
 		{name: "exclude", args: []string{"scan", "--exclude", "docs/", u},
 			want: command{action: actionScan, repos: one(u, ""), exclude: []string{"docs/"}}},
@@ -71,8 +62,6 @@ func TestParseArgs(t *testing.T) {
 		{name: "exclude glob", args: []string{"scan", "--exclude", "**/fixtures/*", u},
 			want: command{action: actionScan, repos: one(u, ""), exclude: []string{"**/fixtures/*"}}},
 		{name: "include-tests is unknown", args: []string{"scan", "--include-tests", u}, wantErr: "include-tests", usage: true},
-		{name: "all flags", args: []string{"scan", "--ref=v1", "--exclude", "x", u},
-			want: command{action: actionScan, repos: one(u, "v1"), exclude: []string{"x"}}},
 		{name: "empty exclude", args: []string{"scan", "--exclude", "", u}, wantErr: "--exclude", usage: true},
 		{name: "empty exclude equals", args: []string{"scan", u, "--exclude="}, wantErr: "--exclude", usage: true},
 		{name: "blank exclude", args: []string{"scan", "--exclude", "  ", u}, wantErr: "pattern is empty", usage: true},
@@ -110,12 +99,16 @@ func TestRunExitCodes(t *testing.T) {
 		args       []string
 		code       int
 		wantOut    string
+		wantNotOut string
 		wantErrHas string
 	}{
 		{name: "no args", code: exitUsage, wantErrHas: "Usage:"},
-		{name: "help", args: []string{"help"}, code: exitOK, wantOut: "skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>[#<ref>]..."},
-		{name: "scan -h", args: []string{"scan", "-h"}, code: exitOK, wantOut: "--ref"},
-		{name: "help says --ref is the default", args: []string{"help"}, code: exitOK, wantOut: "URLs without #<ref>"},
+		{name: "help", args: []string{"help"}, code: exitOK, wantOut: "skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]..."},
+		{name: "help says the default ref", args: []string{"help"}, code: exitOK, wantOut: "#<ref> picks a branch or tag"},
+		{name: "help has no --ref", args: []string{"help"}, code: exitOK, wantNotOut: "--ref"},
+		{name: "--ref is unknown", args: []string{"scan", "--ref", "v1", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "flag provided but not defined: -ref"},
+		{name: "--ref= is unknown", args: []string{"scan", "--ref=v1", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "flag provided but not defined: -ref"},
+		{name: "duplicate with ref", args: []string{"scan", "--html", "https://x.test/a/b#v1", "https://x.test/a/b#v1"}, code: exitUsage, wantErrHas: "x.test/a/b @ v1 given twice"},
 		{name: "help lists html", args: []string{"help"}, code: exitOK, wantOut: "--html"},
 		{name: "help lists exclude", args: []string{"help"}, code: exitOK, wantOut: "--exclude <pattern>"},
 		{name: "html bad url", args: []string{"scan", "--html", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
@@ -124,10 +117,8 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "two bad urls", args: []string{"scan", "a", "b"}, code: exitFail, wantErrHas: "skill-atlas: "},
 		{name: "empty hash ref", args: []string{"scan", "https://x.test/a/b#"}, code: exitUsage, wantErrHas: "missing branch or tag after #"},
 		{name: "duplicate", args: []string{"scan", "--html", "https://x.test/a/b", "https://x.test/a/b.git"}, code: exitUsage, wantErrHas: "x.test/a/b given twice"},
-		{name: "duplicate with ref", args: []string{"scan", "--html", "--ref=v1", "https://x.test/a/b", "https://x.test/a/b#v1"}, code: exitUsage, wantErrHas: "x.test/a/b @ v1 given twice"},
 		{name: "duplicate prints usage", args: []string{"scan", "--html", "https://x.test/a/b", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "Usage:"},
 		{name: "bad url among several", args: []string{"scan", "--html", "https://x.test/a/b", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: `skill-atlas: "http://example.com/a/b.git": `},
-		{name: "empty ref", args: []string{"scan", "--ref=", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "--ref"},
 		{name: "empty exclude", args: []string{"scan", "--exclude=", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "--exclude"},
 		{name: "bad exclude glob", args: []string{"scan", "--exclude", "[", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "malformed"},
 		{name: "bad url", args: []string{"scan", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
@@ -138,6 +129,9 @@ func TestRunExitCodes(t *testing.T) {
 			var out, errb bytes.Buffer
 			if got := run(tt.args, &out, &errb); got != tt.code {
 				t.Fatalf("exit = %d, want %d (stderr %q)", got, tt.code, errb.String())
+			}
+			if tt.wantNotOut != "" && strings.Contains(out.String(), tt.wantNotOut) {
+				t.Errorf("stdout = %q, want no %q", out.String(), tt.wantNotOut)
 			}
 			if !strings.Contains(out.String(), tt.wantOut) {
 				t.Errorf("stdout = %q, want substring %q", out.String(), tt.wantOut)

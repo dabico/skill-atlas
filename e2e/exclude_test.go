@@ -119,7 +119,7 @@ func TestTUIExcluded(t *testing.T) {
 		t.Fatalf("scan API counts = %q", counts)
 	}
 
-	s := startScan(t, "--ref", koog.tag, "--exclude", "integration-tests/", koog.url)
+	s := startScan(t, "--exclude", "integration-tests/", koog.url+"#"+koog.tag)
 	pane := s.waitFor(headerRE(koog, counts), cloneWait)
 	if !strings.Contains(leftPane(pane), ref.skills[0].DisplayName()) {
 		t.Errorf("list doesn't show first skill %q:\n%s", ref.skills[0].DisplayName(), pane)
@@ -151,7 +151,7 @@ func TestTUIExcludeFlags(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			s := startScan(t, append(append([]string{"--ref", koog.tag}, c.args...), koog.url)...)
+			s := startScan(t, append(slices.Clone(c.args), koog.url+"#"+koog.tag)...)
 			pane := s.waitFor(headerRE(koog, c.counts), cloneWait)
 			if c.empty != "" && !strings.Contains(leftPane(pane), c.empty) {
 				t.Errorf("list pane lacks %q:\n%s", c.empty, pane)

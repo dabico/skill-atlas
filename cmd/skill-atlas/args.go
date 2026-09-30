@@ -11,11 +11,13 @@ import (
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>[#<ref>]...
+  skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]...
+
+Arguments:
+  <git-url>[#<ref>]    repository to scan; #<ref> picks a branch or tag (default: remote's default branch)
 
 Flags:
-  --html               open the results as an HTML file in the web browser instead of the TUI
-  --ref <branch|tag>   branch or tag for URLs without #<ref> (default: remote's default branch)
+  --html              open the results as an HTML file in the web browser instead of the TUI
   --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
   -h, --help           show this help
 `
@@ -63,7 +65,6 @@ func parseArgs(args []string) (command, error) {
 func parseScan(args []string) (command, error) {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	ref := fs.String("ref", "", "")
 	html := fs.Bool("html", false, "")
 	var exclude stringList
 	fs.Var(&exclude, "exclude", "")
@@ -83,11 +84,6 @@ func parseScan(args []string) (command, error) {
 		args = fs.Args()[1:]
 	}
 
-	refSet := false
-	fs.Visit(func(f *flag.Flag) { refSet = refSet || f.Name == "ref" })
-	if refSet && *ref == "" {
-		return command{}, &usageError{msg: "--ref needs a branch or tag name"}
-	}
 	for _, p := range exclude {
 		if err := scan.CheckPattern(p); err != nil {
 			return command{}, &usageError{msg: fmt.Sprintf("--exclude %q: %v", p, err)}
@@ -98,7 +94,7 @@ func parseScan(args []string) (command, error) {
 	}
 	repos := make([]repoArg, len(rawURLs))
 	for i, a := range rawURLs {
-		r := repoArg{url: a, ref: *ref}
+		r := repoArg{url: a}
 		if u, refPart, ok := strings.Cut(a, "#"); ok {
 			if refPart == "" {
 				return command{}, &usageError{msg: fmt.Sprintf("%q: missing branch or tag after #", a)}

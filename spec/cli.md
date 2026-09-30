@@ -105,14 +105,13 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 ## Scan command
 
 ```shell
-skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>[#<ref>]...
+skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]...
 ```
 
 - The command takes 1 or more remote Git URLs, over HTTPS or SSH. Local paths aren't supported. No URL is a usage error (`scan needs a git url`).
 - Flags can come before, between or after the URLs.
 - A URL can end in `#<ref>` to pick the branch or tag for that URL. The tool splits at the first `#`. An empty ref (`<url>#`) is a usage error.
 - Without a ref, the scan uses the remote's default branch (`HEAD`).
-- `--ref` takes a branch or tag name. It is the default for URLs without `#<ref>`. A `#<ref>` on a URL wins over `--ref`.
 - Commit SHAs aren't supported. An unknown ref fails the scan with an error.
 - The same repository can appear more than once with different refs. The same repository with the same ref twice is a usage error (exit 2): `github.com/org/repo given twice`, or `github.com/org/repo @ v1 given twice` when a ref is set. The check compares the short form shown in the results, so `https://github.com/org/repo` and `git@github.com:org/repo.git` count as the same repository. It runs after the URLs are parsed. A URL that doesn't parse is an exit 1 error. With several URLs, that error starts with the bad URL.
 - With several URLs the tool clones up to 4 repositories at the same time and prints `Cloning <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.

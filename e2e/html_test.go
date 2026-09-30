@@ -88,7 +88,7 @@ func TestHTMLReport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := runHTML(t, browser, []string{"E2E_REPORT=" + saved, "E2E_URL=" + gotURL}, "--ref", f.tag, f.url)
+	r := runHTML(t, browser, []string{"E2E_REPORT=" + saved, "E2E_URL=" + gotURL}, f.url+"#"+f.tag)
 	if r.code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
 	}
@@ -178,7 +178,7 @@ func TestHTMLExclude(t *testing.T) {
 		t.Fatalf("golden leaves %d skills, want 5", len(kept))
 	}
 
-	r := runHTML(t, requireTool(t, "true"), nil, "--ref", f.tag, "--exclude", ".claude/skills/changelog/", f.url)
+	r := runHTML(t, requireTool(t, "true"), nil, "--exclude", ".claude/skills/changelog/", f.url+"#"+f.tag)
 	if r.code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
 	}
@@ -218,7 +218,7 @@ func TestHTMLBrowserFails(t *testing.T) {
 	for name, browser := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			r := runHTML(t, browser, nil, "--ref", ideavim.tag, ideavim.url)
+			r := runHTML(t, browser, nil, ideavim.url+"#"+ideavim.tag)
 			if r.code != 0 {
 				t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
 			}
