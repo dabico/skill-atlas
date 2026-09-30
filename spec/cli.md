@@ -195,7 +195,7 @@ The page has the same information as the TUI:
 
 - Header: repository URL, ref, short commit SHA, skill count, invalid count. The full commit SHA shows as hover text on the short one. When `--exclude` skipped files, the counts end with `, K excluded`: `5 skills, 1 invalid, 1 excluded`. Without exclusions the page omits it.
 - Contents: a list that links to each skill. Invalid skills have an `invalid` badge.
-- Skill sections: `name`, path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields, and validation errors for invalid skills. Below that, the full Markdown body, rendered.
+- Skill sections: `name`, path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields (Claude Code fields under their own `Claude Code` heading, like the TUI detail pane), and validation errors for invalid skills. Below that, the full Markdown body, rendered.
 - A scan with no skills shows `No skills found`. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
 - The list shows the directory name when a skill has no usable `name`.
 - A filter box narrows the page to matching skills. See [Filter](#filter).

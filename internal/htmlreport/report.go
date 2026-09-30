@@ -8,7 +8,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html/template"
+	"slices"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"skill-atlas/internal/skill"
 )
@@ -58,7 +61,7 @@ type skillData struct {
 	Body        template.HTML // goldmark output without raw HTML
 }
 
-// field is one frontmatter entry; Sub holds the metadata pairs.
+// field is one frontmatter entry; Sub holds the metadata pairs or a provider's fields.
 type field struct {
 	Key, Value string
 	Sub        []skill.MetadataEntry
@@ -128,6 +131,20 @@ func fields(s skill.Skill) []field {
 	add("allowed-tools", s.AllowedTools)
 	if len(s.Metadata) > 0 {
 		out = append(out, field{Key: "metadata", Sub: s.Metadata})
+	}
+	return append(out, extensionFields(s.Extensions)...)
+}
+
+// extensionFields makes one field per provider, in first-seen order, with ANSI stripped like the TUI.
+func extensionFields(exts []skill.Extension) []field {
+	var out []field
+	for _, e := range exts {
+		i := slices.IndexFunc(out, func(f field) bool { return f.Key == ansi.Strip(e.Provider) })
+		if i < 0 {
+			out = append(out, field{Key: ansi.Strip(e.Provider)})
+			i = len(out) - 1
+		}
+		out[i].Sub = append(out[i].Sub, skill.MetadataEntry{Key: ansi.Strip(e.Key), Value: ansi.Strip(e.Value)})
 	}
 	return out
 }

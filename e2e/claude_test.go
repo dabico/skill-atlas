@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -86,4 +87,48 @@ func TestClaudeCodeFields(t *testing.T) {
 	if got := byPath["skills/investigate-repo/SKILL.md"].AllowedTools; got != "Read, Grep, Glob, Bash, WebFetch" {
 		t.Errorf("investigate-repo allowed-tools = %q", got)
 	}
+}
+
+// TestHTMLClaudeFields runs --html on the Claude fixture and checks the page shows the Claude Code fields.
+func TestHTMLClaudeFields(t *testing.T) {
+	t.Parallel()
+	f := claudeSkills
+	r := runHTML(t, requireTool(t, "true"), nil, "--ref", f.tag, f.url)
+	if r.code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
+	}
+	b, err := os.ReadFile(r.reportPath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+
+	if n := strings.Count(page, "<section "); n != 61 {
+		t.Errorf("report has %d skill sections, want 61", n)
+	}
+	for _, w := range []string{
+		"<dt>Claude Code</dt>",
+		"<dt>argument-hint</dt><dd>[path-to-tour]</dd>",
+		"<dt>disable-model-invocation</dt><dd>true</dd>",
+		"<dt>hooks</dt><dd>PreToolUse (1)</dd>",
+		"<dt>hooks</dt><dd>SessionStart (1), UserPromptSubmit (1)</dd>",
+	} {
+		if !strings.Contains(page, w) {
+			t.Errorf("report lacks %q", w)
+		}
+	}
+	// A skill without Claude Code fields has no group.
+	found := false
+	for _, sec := range strings.Split(page, "<section ")[1:] {
+		if strings.Contains(sec, "<code>skills/copywriting/SKILL.md</code>") {
+			found = true
+			if strings.Contains(sec, "Claude Code") {
+				t.Error("copywriting section shows a Claude Code group")
+			}
+		}
+	}
+	if !found {
+		t.Error("report lacks the copywriting section")
+	}
+	checkScriptPinned(t, page)
 }
