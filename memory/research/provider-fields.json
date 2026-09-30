@@ -1,0 +1,356 @@
+{
+ "fields": [
+  {
+   "field": "argument-hint",
+   "implementations": [
+    "Claude Code",
+    "VS Code / GitHub Copilot (VS Code)"
+   ],
+   "value_type": "string",
+   "constraints": "Free text placeholder, e.g. [issue-number] or [filename] [format]. Claude Code: autocomplete hint. VS Code: placeholder in chat input.",
+   "meaning": "Hint shown when skill is run as a slash command, indicating expected arguments.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills",
+    "https://code.visualstudio.com/docs/copilot/customization/agent-skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "disable-model-invocation",
+   "implementations": [
+    "Claude Code",
+    "VS Code / GitHub Copilot (VS Code)",
+    "Cursor",
+    "Factory (Droid)",
+    "Mistral Vibe"
+   ],
+   "value_type": "boolean",
+   "constraints": "Default false. Claude Code (v2.1.218+) also accepts yes/no/on/off/1/0 case-insensitively. true = only user can invoke via /name; in Claude Code also blocks preload into subagents and scheduled-task runs.",
+   "meaning": "Prevent the model from auto-loading the skill; manual slash-command only.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills",
+    "https://code.visualstudio.com/docs/copilot/customization/agent-skills",
+    "https://cursor.com/docs/context/skills",
+    "https://docs.factory.com/cli/configuration/skills",
+    "https://github.com/mistralai/mistral-vibe"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "user-invocable",
+   "implementations": [
+    "Claude Code",
+    "VS Code / GitHub Copilot (VS Code)",
+    "Factory (Droid)",
+    "Mistral Vibe"
+   ],
+   "value_type": "boolean",
+   "constraints": "Default true. false hides skill from / menu and blocks typing /name; model can still load it. Both user-invocable:false and disable-model-invocation:true effectively disables the skill (VS Code).",
+   "meaning": "Whether users can invoke the skill directly as a slash command.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills",
+    "https://code.visualstudio.com/docs/copilot/customization/agent-skills",
+    "https://docs.factory.com/cli/configuration/skills",
+    "https://github.com/mistralai/mistral-vibe"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "type",
+   "implementations": [],
+   "value_type": "n/a",
+   "constraints": "No official docs found defining a top-level type in SKILL.md in any surveyed implementation (Claude Code, Codex, Copilot/VS Code, Cursor, Gemini CLI, Junie, OpenCode, Amp, Roo, Kiro, Factory, Windsurf, Mistral Vibe). Only third-party (non-official) convention: metadata.type = workflow|tool|reference (community guide), and 'type:' tag prefixes in the ClaudSkills registry. 'type' does appear in Codex agents/openai.yaml dependencies.tools[].type (e.g. mcp) and in hooks (command|http|prompt|agent), but those are not SKILL.md skill-level fields.",
+   "meaning": "Not an official SKILL.md field. If a repo uses it, put under metadata (spec-legal) or treat as unknown/ignored extension.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills",
+    "https://agentskills.io/specification",
+    "https://developers.openai.com/codex/skills (redirects to https://learn.chatgpt.com/docs/build-skills)"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "field": "when_to_use",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "string",
+   "constraints": "Only underscore-named field; combined description + when_to_use truncated at 1,536 chars in skill listing.",
+   "meaning": "Extra trigger context appended to description.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "arguments",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "string (space-separated) or list of strings",
+   "constraints": "Names map to argument positions in order, for $name substitution in skill body.",
+   "meaning": "Named positional arguments.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "disallowed-tools",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "string (space/comma-separated) or list",
+   "constraints": "Restriction clears on next user message; cannot remove EndConversation while other tools remain.",
+   "meaning": "Tools removed from pool while skill active.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "model",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "string",
+   "constraints": "Same values as /model, or 'inherit'. Applies for the rest of current turn; org availableModels allowlist may reject; with context: fork sets subagent model.",
+   "meaning": "Model override while skill active.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "effort",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "enum(low, medium, high, xhigh, max)",
+   "constraints": "Available levels depend on model; default inherits session.",
+   "meaning": "Effort level override while skill active.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "context",
+   "implementations": [
+    "Claude Code",
+    "VS Code / GitHub Copilot (VS Code, experimental)"
+   ],
+   "value_type": "enum(fork)",
+   "constraints": "Only documented value is 'fork' (default inline). VS Code requires setting github.copilot.chat.skillTool.enabled.",
+   "meaning": "Run skill in a forked subagent context.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills",
+    "https://code.visualstudio.com/docs/copilot/customization/agent-skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "agent",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "string (subagent type name)",
+   "constraints": "Used only when context: fork.",
+   "meaning": "Which subagent type runs the forked skill.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "background",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "boolean",
+   "constraints": "Only with context: fork; default true; requires v2.1.218+.",
+   "meaning": "false = wait for forked subagent result in the invoking turn.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "hooks",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "map (hooks config)",
+   "constraints": "Format per Claude Code hooks docs ('hooks in skills and agents'); supports 'once' option.",
+   "meaning": "Hooks registered while skill is invoked, kept for session.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills",
+    "https://code.claude.com/docs/en/hooks"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "paths",
+   "implementations": [
+    "Claude Code",
+    "Cursor"
+   ],
+   "value_type": "string (comma-separated) or list of glob patterns",
+   "constraints": "Skill auto-loads only when working with matching files. Cursor: legacy 'globs' still works as fallback.",
+   "meaning": "Glob scoping for activation.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills",
+    "https://cursor.com/docs/context/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "globs",
+   "implementations": [
+    "Cursor (legacy fallback)"
+   ],
+   "value_type": "list or comma-separated string",
+   "constraints": "Superseded by paths.",
+   "meaning": "Legacy path scoping.",
+   "sources": [
+    "https://cursor.com/docs/context/skills"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "field": "shell",
+   "implementations": [
+    "Claude Code"
+   ],
+   "value_type": "enum(bash, powershell)",
+   "constraints": "Default bash; powershell requires PowerShell tool enabled.",
+   "meaning": "Shell for inline !`cmd` blocks.",
+   "sources": [
+    "https://code.claude.com/docs/en/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "allowed-tools",
+   "implementations": [
+    "Agent Skills spec (experimental)",
+    "Claude Code",
+    "GitHub Copilot",
+    "Factory (Droid)",
+    "Mistral Vibe"
+   ],
+   "value_type": "string (space-separated per spec); Claude Code also accepts comma-separated string or YAML list; Vibe/Factory show YAML list",
+   "constraints": "Spec: experimental, space-separated. Claude Code: pre-approval for the invoking turn only. Factory: informational only, not a sandbox. Copilot: pre-approves tools (warn on shell).",
+   "meaning": "Pre-approved tools. Already a spec field, but list-form values are accepted by several implementations, so a validator should accept lists.",
+   "sources": [
+    "https://agentskills.io/specification",
+    "https://code.claude.com/docs/en/skills",
+    "https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/create-skills",
+    "https://docs.factory.com/cli/configuration/skills",
+    "https://github.com/mistralai/mistral-vibe"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "enabled",
+   "implementations": [
+    "Factory (Droid)"
+   ],
+   "value_type": "boolean",
+   "constraints": "Default true; false = nobody can invoke.",
+   "meaning": "Turn skill off while keeping files.",
+   "sources": [
+    "https://docs.factory.com/cli/configuration/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "version",
+   "implementations": [
+    "Factory (Droid)"
+   ],
+   "value_type": "string",
+   "constraints": "None stated. In the spec, version is only a conventional metadata key (metadata.version). Claude Code docs listed 'version' only in the task prompt, not in the frontmatter table.",
+   "meaning": "Version string for packaged/shared skills.",
+   "sources": [
+    "https://docs.factory.com/cli/configuration/skills",
+    "https://agentskills.io/specification"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "field": "tools (deprecated)",
+   "implementations": [
+    "Factory (Droid)"
+   ],
+   "value_type": "list",
+   "constraints": "Deprecated; use allowed-tools.",
+   "meaning": "Legacy alias for allowed-tools.",
+   "sources": [
+    "https://docs.factory.com/cli/configuration/skills"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "field": "icon",
+   "implementations": [
+    "Cursor"
+   ],
+   "value_type": "string",
+   "constraints": "e.g. code, terminal, bug, beaker, rocket; unknown falls back to lightning icon. Only used for Custom Mode badge.",
+   "meaning": "Badge icon.",
+   "sources": [
+    "https://cursor.com/docs/context/skills"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "field": "color",
+   "implementations": [
+    "Cursor"
+   ],
+   "value_type": "enum(default, green, cyan, blue, purple, magenta, orange, yellow, red, brand)",
+   "constraints": "Invalid falls back to default.",
+   "meaning": "Custom Mode badge color.",
+   "sources": [
+    "https://cursor.com/docs/context/skills"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "field": "mcpServers",
+   "implementations": [
+    "Amp"
+   ],
+   "value_type": "map of server name to config",
+   "constraints": "Overrides sibling mcp.json. Local: command, args, env; remote: url, headers; both: includeTools.",
+   "meaning": "Inline MCP servers bundled with skill.",
+   "sources": [
+    "https://ampcode.com/docs/customize/skills"
+   ],
+   "confidence": "high"
+  },
+  {
+   "field": "license / compatibility / metadata",
+   "implementations": [
+    "Agent Skills spec",
+    "Claude Code (accepted, not acted on)",
+    "OpenCode",
+    "Kiro",
+    "Factory",
+    "Mistral Vibe",
+    "Cursor (metadata)"
+   ],
+   "value_type": "license: string; compatibility: string (max 500); metadata: map string->string",
+   "constraints": "Spec fields. Claude Code drops metadata that is not a map and says do not reuse frontmatter names (e.g. paths) as metadata keys. claude.ai/API upload rejects any non-spec key with hard error 'Unexpected key(s) in SKILL.md frontmatter'.",
+   "meaning": "Spec-standard optional fields.",
+   "sources": [
+    "https://agentskills.io/specification",
+    "https://code.claude.com/docs/en/skills",
+    "https://opencode.ai/docs/skills/",
+    "https://kiro.dev/docs/skills/"
+   ],
+   "confidence": "high"
+  }
+ ],
+ "notes": "Key findings. (1) No official doc defines a top-level 'type' in SKILL.md; the only sources are third-party (metadata.type workflow|tool|reference; ClaudSkills tag prefixes). Recommend treating 'type' as unknown-but-tolerated, or hint to move under metadata. (2) The Claude Code docs say unknown fields are silently ignored, so 'invalid' for argument-hint and disable-model-invocation is a false positive. Only claude.ai upload/API packaging is strict (allowed: name, description, license, compatibility, metadata, allowed-tools). Suggest a two-tier validator: spec fields, then per-implementation extensions, then warn (not error) on unknown fields. (3) Claude Code docs on 2026-09-30 list: name, description, when_to_use, argument-hint, arguments, disable-model-invocation, user-invocable, allowed-tools, disallowed-tools, model, effort, context, agent, background, hooks, paths, shell, metadata, license, compatibility. Full table saved in /Users/Ozren.Dabic/.claude/projects/-Users-Ozren-Dabic-Desktop-skill-atlas/73f0d805-b4a4-4df5-9c01-76dade44d8b6/tool-results/toolu_017XoGVzrTPzUsmyoGq83t6n.txt lines 348-408. (4) Codex: SKILL.md documents only name and description; extras live in sidecar agents/openai.yaml (interface.display_name, short_description, icon_small, icon_large, brand_color, default_prompt; policy.allow_implicit_invocation; dependencies.tools[] with type/value/description/transport/url), a separate file, not frontmatter. (5) Gemini CLI, Junie, Roo, Windsurf (docs.devin.ai/desktop/cascade/skills), Goose: only name and description documented. Junie description is optional (falls back to first body paragraph). OpenCode: unknown fields ignored, name regex ^[a-z0-9]+(-[a-z0-9]+)*$, 1-64 chars, description 1-1024. Copilot (GitHub docs) lists name, description, license, allowed-tools plus auto-written provenance metadata (source repo, ref, tree SHA) from gh skill install. (6) Not verified: Goose docs URL 404; Microsoft Agent Framework page only mirrors the spec fields (table at lines 85-90 of the saved result); Mistral Vibe info is from its README, not a docs site; Cursor page content came via fetch summary; Windsurf page redirected to docs.devin.ai. The 'version' field was only confirmed for Factory. I did not verify Claude Code documenting a version field. No files in skill-atlas were edited."
+}
