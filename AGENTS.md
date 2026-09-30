@@ -11,9 +11,11 @@ go build ./...
 go test -short -race ./...                          # unit tests, no network
 go test -race -count=1 ./internal/repo/...          # clone tests against GitHub
 go test -tags e2e -count=1 -timeout 10m ./e2e/...   # needs tmux
+e2e/screenshots.sh [-update]                        # HTML screenshots, needs Docker
 ```
 
 - `-update` on the e2e run rewrites the golden files in `e2e/testdata/`.
+- HTML screenshot baselines in `e2e/testdata/screenshots/` are rendered only in the pinned Linux container of `e2e/screenshots.sh`. `go test` skips them elsewhere. When the page changes on purpose, run `e2e/screenshots.sh -update`, look at the new PNGs and commit them. Failing shots leave `expected.png`, `actual.png` and `diff.png` in `$E2E_ARTIFACTS_DIR/screenshots/`.
 - `SKILL_ATLAS_E2E_HEAD=1` adds tests against each fixture's HEAD.
 - Lint, as in CI: `gofmt -l .`, `go vet ./...`, `go vet -tags e2e ./...`, `go mod tidy -diff`, `go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12`.
 
