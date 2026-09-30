@@ -14,13 +14,14 @@ import (
 )
 
 // headingShift moves body headings below the skill name (h2) and the page title (h1).
+// A page with several repositories adds 1 more for the repository heading.
 const headingShift = 2
 
 // renderBody converts a skill's Markdown body to HTML. Raw HTML is dropped (no html.WithUnsafe).
-func renderBody(body string) (template.HTML, error) {
+func renderBody(body string, shift int) (template.HTML, error) {
 	md := goldmark.New(
 		goldmark.WithExtensions(extension.GFM),
-		goldmark.WithParserOptions(parser.WithASTTransformers(util.Prioritized(sanitizer{}, 100))),
+		goldmark.WithParserOptions(parser.WithASTTransformers(util.Prioritized(sanitizer{shift: shift}, 100))),
 	)
 	var buf bytes.Buffer
 	if err := md.Convert([]byte(body), &buf); err != nil {
@@ -30,9 +31,9 @@ func renderBody(body string) (template.HTML, error) {
 }
 
 // sanitizer rewrites the AST before rendering: unsafe links become text, images become alt text, headings shift down.
-type sanitizer struct{}
+type sanitizer struct{ shift int }
 
-func (sanitizer) Transform(doc *ast.Document, reader text.Reader, _ parser.Context) {
+func (s sanitizer) Transform(doc *ast.Document, reader text.Reader, _ parser.Context) {
 	src := reader.Source()
 	var images, links, autoLinks []ast.Node
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -41,7 +42,7 @@ func (sanitizer) Transform(doc *ast.Document, reader text.Reader, _ parser.Conte
 		}
 		switch n := n.(type) {
 		case *ast.Heading:
-			n.Level = min(n.Level+headingShift, 6)
+			n.Level = min(n.Level+s.shift, 6)
 		case *ast.Image:
 			images = append(images, n)
 		case *ast.Link:

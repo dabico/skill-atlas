@@ -254,7 +254,7 @@ func TestTUI(t *testing.T) {
 			invalid++
 		}
 	}
-	s := startScan(t, "--ref", f.tag, f.url)
+	s := startScan(t, f.url+"#"+f.tag)
 
 	header := regexp.MustCompile(regexp.QuoteMeta(fmt.Sprintf("%s @ %s (%s)", f.display, f.tag, f.sha[:7])) +
 		`\s+` + fmt.Sprintf("%d skills, %d invalid", len(skills), invalid))
@@ -337,7 +337,7 @@ func TestTUIErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"unknown-ref", []string{"--ref", "no-such-ref-e2e", ideavim.url},
+		{"unknown-ref", []string{ideavim.url + "#no-such-ref-e2e"},
 			`ref "no-such-ref-e2e" not found in ` + ideavim.display},
 		{"unknown-repo", []string{"https://github.com/JetBrains/this-repo-does-not-exist-e2e.git"},
 			`authentication failed for github.com/JetBrains/this-repo-does-not-exist-e2e: the repository may be private or may not exist`},
@@ -359,7 +359,7 @@ func TestTUIErrors(t *testing.T) {
 
 func TestTUIInterrupt(t *testing.T) {
 	t.Parallel()
-	s := startScan(t, "--ref", ideavim.tag, ideavim.url)
+	s := startScan(t, ideavim.url+"#"+ideavim.tag)
 	s.waitFor(regexp.MustCompile(regexp.QuoteMeta("Cloning "+ideavim.display+" @ "+ideavim.tag)), shortWait)
 	// The clone takes seconds, so Ctrl+C sent right away lands mid-clone.
 	s.keys("C-c")

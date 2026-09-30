@@ -27,7 +27,7 @@ func filterSkills() []skill.Skill {
 }
 
 func TestRenderOneScriptPinnedByHash(t *testing.T) {
-	_, doc := render(t, Report{Repo: "github.com/o/r", Ref: "main", SHA: "abcdef0123", Skills: filterSkills()})
+	_, doc := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Ref: "main", SHA: "abcdef0123", Skills: filterSkills()}}})
 	assertInert(t, doc, 1, 1)
 
 	scripts := elements(doc, "script")
@@ -68,7 +68,7 @@ func TestFilterScriptIsSmall(t *testing.T) {
 }
 
 func TestRenderNoScriptWithoutSkills(t *testing.T) {
-	page, doc := render(t, Report{Repo: "github.com/o/r", Excluded: 2})
+	page, doc := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Excluded: 2}}})
 	assertInert(t, doc, 1, 0)
 	if got := metaContent(doc, "Content-Security-Policy"); got != cspNoScript {
 		t.Errorf("CSP = %q, want %q", got, cspNoScript)
@@ -79,7 +79,7 @@ func TestRenderNoScriptWithoutSkills(t *testing.T) {
 }
 
 func TestRenderFilterBoxHiddenByDefault(t *testing.T) {
-	_, doc := render(t, Report{Repo: "github.com/o/r", Skills: filterSkills()})
+	_, doc := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Skills: filterSkills()}}})
 	byID := map[string]*html.Node{}
 	walk(doc, func(n *html.Node) {
 		if n.Type == html.ElementNode && attr(n, "id") != "" {
@@ -117,7 +117,7 @@ func TestRenderFilterBoxHiddenByDefault(t *testing.T) {
 func TestRenderMatchText(t *testing.T) {
 	bad := skill.Skill{Path: "dir/" + hostile + "/SKILL.md", Dir: "dir", Name: hostile, Description: hostile}
 	skills := append(filterSkills(), bad)
-	page, doc := render(t, Report{Repo: "github.com/o/r", Skills: skills})
+	page, doc := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Skills: skills}}})
 
 	var want []string
 	for _, s := range skills {

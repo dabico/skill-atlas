@@ -35,8 +35,12 @@ func testSkills() []skill.Skill {
 	}
 }
 
+func oneRepo(skills []skill.Skill, excluded int) Report {
+	return Report{Repos: []Repo{{Name: "github.com/org/repo", Ref: "main", SHA: "a1b2c3d4e5f6", Skills: skills, Excluded: excluded}}}
+}
+
 func newTest(skills []skill.Skill, w, h int) *model {
-	m := newModel(Report{Repo: "github.com/org/repo", Ref: "main", SHA: "a1b2c3d4e5f6", Skills: skills})
+	m := newModel(oneRepo(skills, 0))
 	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	return m
 }
@@ -64,6 +68,8 @@ func press(m *model, keys ...string) tea.Cmd {
 	}
 	return cmd
 }
+
+func sizeMsg(w, h int) tea.WindowSizeMsg { return tea.WindowSizeMsg{Width: w, Height: h} }
 
 func typeText(m *model, s string) {
 	for _, r := range s {
@@ -102,7 +108,7 @@ func TestHeader(t *testing.T) {
 }
 
 func newExcluded(skills []skill.Skill, excluded, w, h int) *model {
-	m := newModel(Report{Repo: "github.com/org/repo", Ref: "main", SHA: "a1b2c3d4e5f6", Skills: skills, Excluded: excluded})
+	m := newModel(oneRepo(skills, excluded))
 	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	return m
 }
@@ -304,7 +310,7 @@ func TestFilter(t *testing.T) {
 			typeText(m, tt.query)
 			var got []string
 			for _, i := range m.visible {
-				got = append(got, m.report.Skills[i].DisplayName())
+				got = append(got, m.skills[i].DisplayName())
 			}
 			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
 				t.Errorf("visible = %v, want %v", got, tt.want)
@@ -423,8 +429,8 @@ func TestBackgroundColorSelectsStyle(t *testing.T) {
 
 func TestRenderMarkdownFallbackOnBadStyle(t *testing.T) {
 	m := newTest(testSkills(), 100, 30)
-	s := m.report.Skills[0]
-	if out := m.renderBody(s, 40); out == "" {
+	s := m.skills[0]
+	if out := m.renderBody(0, s, 40); out == "" {
 		t.Error("empty render")
 	}
 }

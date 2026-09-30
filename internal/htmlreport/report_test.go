@@ -167,7 +167,7 @@ func TestRenderHostile(t *testing.T) {
 		Body:          body,
 		Errors:        []string{hostile, `name "` + hostile + `" contains uppercase letters`},
 	}
-	page, doc := render(t, Report{Repo: hostile, Ref: hostile, SHA: hostile + "0123456789", Skills: []skill.Skill{s}})
+	page, doc := render(t, Report{Repos: []Repo{{Name: hostile, Ref: hostile, SHA: hostile + "0123456789", Skills: []skill.Skill{s}}}})
 
 	assertInert(t, doc, 1, 1)
 	lower := strings.ToLower(string(page))
@@ -246,7 +246,7 @@ func TestRenderStructure(t *testing.T) {
 		{Path: "skills/nameless/SKILL.md", Dir: "nameless", Errors: []string{"missing name", "missing description"}},
 	}
 	sha := "c1ae565cfb98be30ea75e4b351e823846c69c3c8"
-	page, doc := render(t, Report{Repo: "github.com/org/repo", Ref: "v1.2.0", SHA: sha, Skills: skills})
+	page, doc := render(t, Report{Repos: []Repo{{Name: "github.com/org/repo", Ref: "v1.2.0", SHA: sha, Skills: skills}}})
 	assertInert(t, doc, 1, 1)
 
 	if !bytes.Contains(page, []byte(`<meta http-equiv="Content-Security-Policy" content="`+cspWithScript(filterScript)+`">`)) {
@@ -388,7 +388,7 @@ func TestRenderCounts(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			page, _ := render(t, Report{Repo: "github.com/o/r", Ref: "main", SHA: "abcdef0123", Skills: tt.skills})
+			page, _ := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Ref: "main", SHA: "abcdef0123", Skills: tt.skills}}})
 			if !bytes.Contains(page, []byte(">"+tt.want+"<")) {
 				t.Errorf("page lacks %q", tt.want)
 			}
@@ -415,7 +415,7 @@ func TestRenderExcluded(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			page, _ := render(t, Report{Repo: "github.com/o/r", Skills: tt.skills, Excluded: tt.excluded})
+			page, _ := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Skills: tt.skills, Excluded: tt.excluded}}})
 			if !bytes.Contains(page, []byte(tt.want)) {
 				t.Errorf("page lacks %q", tt.want)
 			}
@@ -427,7 +427,7 @@ func TestRenderExcluded(t *testing.T) {
 }
 
 func TestRenderEmpty(t *testing.T) {
-	page, doc := render(t, Report{Repo: "github.com/o/r", Ref: "main", SHA: "abcdef0123"})
+	page, doc := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Ref: "main", SHA: "abcdef0123"}}})
 	assertInert(t, doc, 1, 0)
 	if !bytes.Contains(page, []byte(">No skills found<")) {
 		t.Error(`page lacks "No skills found"`)
@@ -444,7 +444,7 @@ func TestRenderEmpty(t *testing.T) {
 }
 
 func TestRenderNoRefNoSHA(t *testing.T) {
-	page, _ := render(t, Report{Repo: "github.com/o/r"})
+	page, _ := render(t, Report{Repos: []Repo{{Name: "github.com/o/r"}}})
 	if bytes.Contains(page, []byte("@ ")) || bytes.Contains(page, []byte("title=")) {
 		t.Errorf("page shows a ref or SHA that isn't set:\n%s", page)
 	}
@@ -453,7 +453,7 @@ func TestRenderNoRefNoSHA(t *testing.T) {
 // TestRenderSelfContained checks the page makes no external requests.
 func TestRenderSelfContained(t *testing.T) {
 	s := skill.Skill{Path: "a/SKILL.md", Dir: "a", Name: "a", Description: "d", Body: "[x](https://example.com) ![i](https://example.com/i.png)"}
-	page, _ := render(t, Report{Repo: "github.com/o/r", Ref: "main", SHA: "abcdef0123", Skills: []skill.Skill{s}})
+	page, _ := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Ref: "main", SHA: "abcdef0123", Skills: []skill.Skill{s}}}})
 	lower := strings.ToLower(string(page))
 	for _, bad := range []string{"@import", "url(", "src=", "<img", "<iframe", "<object", "<embed"} {
 		if strings.Contains(lower, bad) {

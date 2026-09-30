@@ -19,6 +19,7 @@ var (
 	testTarget   = repo.Target{Display: "github.com/o/r"}
 	testCheckout = repo.Checkout{Ref: "main", SHA: "0123456789abcdef"}
 	testResult   = scan.Result{Skills: []skill.Skill{{Path: "a/SKILL.md", Dir: "a", Name: "a", Description: "d"}}, Excluded: 2}
+	testScanned  = []scanned{{source: source{target: testTarget}, checkout: testCheckout, res: testResult}}
 )
 
 func useTempDir(t *testing.T) string {
@@ -34,7 +35,7 @@ func TestShowHTMLOpensFile(t *testing.T) {
 	dir := useTempDir(t)
 	var opened string
 	var errb bytes.Buffer
-	err := showHTML(testTarget, testCheckout, testResult, func(u string) error { opened = u; return nil }, &errb)
+	err := showHTML(testScanned, func(u string) error { opened = u; return nil }, &errb)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +66,7 @@ func TestShowHTMLOpensFile(t *testing.T) {
 func TestShowHTMLOpenFailureWarns(t *testing.T) {
 	useTempDir(t)
 	var errb bytes.Buffer
-	err := showHTML(testTarget, testCheckout, testResult, func(string) error { return errors.New("boom") }, &errb)
+	err := showHTML(testScanned, func(string) error { return errors.New("boom") }, &errb)
 	if err != nil {
 		t.Fatalf("a failed launch returned %v, want nil", err)
 	}
@@ -88,7 +89,7 @@ func TestShowHTMLWriteFailure(t *testing.T) {
 	t.Setenv("TEMP", bad)
 	called := false
 	var errb bytes.Buffer
-	err := showHTML(testTarget, testCheckout, testResult, func(string) error { called = true; return nil }, &errb)
+	err := showHTML(testScanned, func(string) error { called = true; return nil }, &errb)
 	if err == nil {
 		t.Fatal("showHTML succeeded without a writable temp dir")
 	}

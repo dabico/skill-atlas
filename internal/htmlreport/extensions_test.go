@@ -23,7 +23,7 @@ func TestRenderExtensions(t *testing.T) {
 		},
 	}
 	without := skill.Skill{Path: "b/SKILL.md", Dir: "b", Name: "b", Description: "d", License: "MIT"}
-	_, doc := render(t, Report{Repo: "r", Skills: []skill.Skill{with, without}})
+	_, doc := render(t, Report{Repos: []Repo{{Name: "r", Skills: []skill.Skill{with, without}}}})
 	sections := elements(doc, "section")
 
 	var dts, dds []string
@@ -51,7 +51,7 @@ func TestRenderExtensions(t *testing.T) {
 		t.Errorf("skill without extensions shows a group: %q", got)
 	}
 	only := skill.Skill{Path: "c/SKILL.md", Dir: "c", Name: "c", Extensions: []skill.Extension{claudeExt("hooks", "Stop (1)")}}
-	_, doc = render(t, Report{Repo: "r", Skills: []skill.Skill{only}})
+	_, doc = render(t, Report{Repos: []Repo{{Name: "r", Skills: []skill.Skill{only}}}})
 	if len(elements(doc, "dl")) != 2 {
 		t.Errorf("group without other fields: got %d dl elements, want 2", len(elements(doc, "dl")))
 	}
@@ -61,7 +61,7 @@ func TestRenderExtensionsGroupByProvider(t *testing.T) {
 	s := skill.Skill{Path: "a/SKILL.md", Dir: "a", Name: "a", Extensions: []skill.Extension{
 		claudeExt("x", "1"), {Provider: "Other", Key: "y", Value: "2"}, claudeExt("z", "3"),
 	}}
-	_, doc := render(t, Report{Repo: "r", Skills: []skill.Skill{s}})
+	_, doc := render(t, Report{Repos: []Repo{{Name: "r", Skills: []skill.Skill{s}}}})
 	var dts []string
 	for _, dt := range elements(elements(doc, "section")[0], "dt") {
 		dts = append(dts, textOf(dt))
@@ -76,7 +76,7 @@ func TestRenderExtensionsHostile(t *testing.T) {
 		{Provider: hostile, Key: hostile, Value: hostile},
 		claudeExt("k\x1b[31mred\x1b[0m", "v\x1b[31mred\x1b[0m\x1b]0;title\x07"),
 	}}
-	page, doc := render(t, Report{Repo: "r", Skills: []skill.Skill{s}})
+	page, doc := render(t, Report{Repos: []Repo{{Name: "r", Skills: []skill.Skill{s}}}})
 	assertInert(t, doc, 1, 1)
 	if n := strings.Count(strings.ToLower(string(page)), "<script"); n != 1 {
 		t.Errorf("page has %d script tags, want 1", n)

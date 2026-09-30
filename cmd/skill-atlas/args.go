@@ -5,17 +5,22 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 
 	"skill-atlas/internal/scan"
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
+  skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<ref>]...
+
+Arguments:
+  <git-url>[#<ref>]    repository to scan; #<ref> picks a branch or tag (default: remote's default branch)
 
 Flags:
   --html               open the results as an HTML file in the web browser instead of the TUI
-  --ref <branch|tag>   branch or tag to scan (default: remote's default branch)
   --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
+  --parallel <n>       clone at most n repositories at once (default: 4, minimum: 1)
   -h, --help           show this help
 `
 
@@ -28,11 +33,17 @@ const (
 
 // command is the result of parsing the command line.
 type command struct {
-	action  action
-	url     string
-	ref     string
-	html    bool
-	exclude []string // --exclude patterns, in order
+	action   action
+	repos    []repoArg // in command-line order
+	html     bool
+	exclude  []string // --exclude patterns, in order
+	parallel int      // --parallel value, or defaultParallel
+}
+
+// repoArg is one <git-url>[#<ref>] argument; ref is empty for the remote's default branch.
+type repoArg struct {
+	url string
+	ref string
 }
 
 // usageError is a bad command line; msg may be empty when only usage is shown.
@@ -57,12 +68,20 @@ func parseArgs(args []string) (command, error) {
 func parseScan(args []string) (command, error) {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	ref := fs.String("ref", "", "")
 	html := fs.Bool("html", false, "")
 	var exclude stringList
 	fs.Var(&exclude, "exclude", "")
+	parallel := defaultParallel
+	fs.Func("parallel", "", func(s string) error {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 {
+			return fmt.Errorf("%q is not an integer of 1 or more", s)
+		}
+		parallel = n
+		return nil
+	})
 
-	var urls []string
+	var rawURLs []string
 	for {
 		if err := fs.Parse(args); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
@@ -73,25 +92,28 @@ func parseScan(args []string) (command, error) {
 		if fs.NArg() == 0 {
 			break
 		}
-		urls = append(urls, fs.Arg(0))
+		rawURLs = append(rawURLs, fs.Arg(0))
 		args = fs.Args()[1:]
 	}
 
-	refSet := false
-	fs.Visit(func(f *flag.Flag) { refSet = refSet || f.Name == "ref" })
-	if refSet && *ref == "" {
-		return command{}, &usageError{msg: "--ref needs a branch or tag name"}
-	}
 	for _, p := range exclude {
 		if err := scan.CheckPattern(p); err != nil {
 			return command{}, &usageError{msg: fmt.Sprintf("--exclude %q: %v", p, err)}
 		}
 	}
-	switch {
-	case len(urls) == 0:
+	if len(rawURLs) == 0 {
 		return command{}, &usageError{msg: "scan needs a git url"}
-	case len(urls) > 1:
-		return command{}, &usageError{msg: "scan takes exactly one git url"}
 	}
-	return command{action: actionScan, url: urls[0], ref: *ref, html: *html, exclude: exclude}, nil
+	repos := make([]repoArg, len(rawURLs))
+	for i, a := range rawURLs {
+		r := repoArg{url: a}
+		if u, refPart, ok := strings.Cut(a, "#"); ok {
+			if refPart == "" {
+				return command{}, &usageError{msg: fmt.Sprintf("%q: missing branch or tag after #", a)}
+			}
+			r = repoArg{url: u, ref: refPart}
+		}
+		repos[i] = r
+	}
+	return command{action: actionScan, repos: repos, html: *html, exclude: exclude, parallel: parallel}, nil
 }

@@ -9,7 +9,7 @@ import (
 // bodyHTML renders md and returns the output with its parsed hrefs; the output must pass the inert checks.
 func bodyHTML(t *testing.T, md string) (out string, hrefs []string) {
 	t.Helper()
-	h, err := renderBody(md)
+	h, err := renderBody(md, headingShift)
 	if err != nil {
 		t.Fatal(err)
 	}

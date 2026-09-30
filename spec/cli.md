@@ -105,18 +105,28 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 ## Scan command
 
 ```shell
-skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
+skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<ref>]...
 ```
 
-- The first version accepts 1 remote Git URL, over HTTPS or SSH. Local paths aren't supported.
-- Without `--ref`, the scan uses the remote's default branch (`HEAD`).
-- `--ref` takes a branch or tag name. Commit SHAs aren't supported. An unknown ref fails the scan with an error.
+- The command takes 1 or more remote Git URLs, over HTTPS or SSH. Local paths aren't supported. No URL is a usage error (`scan needs a git url`).
+- Flags can come before, between or after the URLs.
+- A URL can end in `#<ref>` to pick the branch or tag for that URL. The tool splits at the first `#`. An empty ref (`<url>#`) is a usage error.
+- Without a ref, the scan uses the remote's default branch (`HEAD`).
+- Commit SHAs aren't supported. An unknown ref fails the scan with an error.
+- The same repository can appear more than once with different refs. The same repository with the same ref twice is a usage error (exit 2): `github.com/org/repo given twice`, or `github.com/org/repo @ v1 given twice` when a ref is set. The check compares the short form shown in the results, so `https://github.com/org/repo` and `git@github.com:org/repo.git` count as the same repository. It runs after the URLs are parsed. A URL that doesn't parse is an exit 1 error. With several URLs, that error starts with the bad URL.
+- With several URLs the tool clones up to `--parallel` repositories at the same time and prints `Cloning <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.
+- With several URLs, a repository that fails to clone or scan doesn't stop the others. The tool records the failure for that repository and prints `skill-atlas: <repo>[ @ <ref>]: <error>` to stderr as it happens, before the TUI or report starts. Escape sequences in the error text are removed.
+- When some repositories fail, the TUI or the report shows all of them in command-line order, with the failed ones marked. The tool then exits 1, after the TUI quits or the report opens, so scripts can tell that the result is incomplete.
+- When every repository fails, the tool exits 1 and shows no TUI and writes no report file.
+- With 1 URL, a failure prints `skill-atlas: <error>` without the repository prefix and exits 1.
+- In zsh with `extendedglob`, `#` starts a pattern, so quote a URL that has a ref: `'https://github.com/org/repo#v1'`.
 - `--html` writes the results to an HTML file and opens it in the web browser instead of showing the TUI. See [HTML report](#html-report).
-- `--exclude` skips `SKILL.md` files by path. The flag is repeatable.
+- `--exclude` skips `SKILL.md` files by path. The flag is repeatable and applies to every repository.
 - Details are under [Excluded paths](#excluded-paths).
+- `--parallel <n>` sets how many repositories clone at the same time. The default is 4. `<n>` is an integer of 1 or more, with no upper limit. Both `--parallel <n>` and `--parallel=<n>` work. Any other value (0, a negative number, text or nothing) is a usage error and exits 2.
 - Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
 - Clones are shallow (depth 1). The scan doesn't need history.
-- The results show the commit SHA that was scanned.
+- The results show the commit SHA that was scanned, per repository.
 - Public repositories over HTTPS need no credentials. Private repositories over HTTPS aren't supported.
 - SSH URLs authenticate through the SSH agent (`SSH_AUTH_SOCK`). Host keys are checked against `~/.ssh/known_hosts`.
 - Cloning never prompts. If the clone needs input it can't get, the scan fails with an error, e.g. `authentication failed for <url>`.
@@ -156,12 +166,13 @@ Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' 
 ### State
 
 The tool stores no state, with 1 exception: the HTML report file (see [Delivery](#delivery)).
-The clone goes into a temporary directory, which gets deleted before the tool exits.
+The clones go into one temporary directory, with a subdirectory per repository. The tool deletes it before it exits.
 Results are discarded after the scan. `--html` keeps the report file in the OS temp directory.
 
 ## TUI
 
 Split view: skill list on the left, details of the selected skill on the right.
+This is the layout for 1 repository. See [Several repositories](#several-repositories-in-the-tui) for more.
 
 ```text
  github.com/org/repo @ main (a1b2c3d)        12 skills, 2 invalid
@@ -186,6 +197,28 @@ Split view: skill list on the left, details of the selected skill on the right.
 - The list shows the directory name when a skill has no usable `name`.
 - Footer: key hints.
 
+### Several repositories in the TUI
+
+```text
+ 2 repositories                              15 skills, 2 invalid
+┌ Skills ──────────────────┬ pdf-processing ───────────────────────┐
+│ github.com/org/a @ main… │ github.com/org/a @ main (a1b2c3d)     │
+│ > pdf-processing         │ skills/pdf-processing/SKILL.md        │
+│   code-review            │                                       │
+│ github.com/org/b @ v1 (… │ Extract PDF text, fill forms, merge   │
+│ ! PDF-Tool   [invalid]   │ files. Use when handling PDFs.        │
+└──────────────────────────┴───────────────────────────────────────┘
+```
+
+- Header: `N repositories` on the left, bold. On the right, the totals over all repositories: `N skills, M invalid`, plus `, K excluded` when any repository excluded files and `, Z failed` when Z repositories failed, e.g. `15 skills, 2 invalid, 1 failed`.
+- The list is grouped by repository, in command-line order. Each group starts with a heading row, `<repo> @ <ref> (<short sha>)`. Headings can't be selected. The cursor skips them.
+- When the cursor is on the first skill of a group, the list scrolls to show the heading too, if it fits.
+- A repository with no skills shows its heading and a dim `No skills found` row. With exclusions the row reads `No skills found (2 excluded)`. The row isn't shown while a filter is active.
+- A repository that failed shows its heading and, under it, a row with the error message in the warning style, e.g. `authentication failed for github.com/org/b`. The heading has no `(<short sha>)` when the clone did not finish. The error row can't be selected and the cursor skips it. Like the `No skills found` row it is not shown while a filter is active. A message longer than the list pane is cut with `…`. The full message is on stderr. Escape sequences in it are removed.
+- The filter also matches the repository name. A heading shows only while a skill in its group matches. `Skills N/M` counts skills only.
+- The first line of the detail pane is the dim repository label, then the skill path.
+- The minimum terminal size stays 60x12.
+
 ## HTML report
 
 `skill-atlas scan --html <git-url>` writes the results to an HTML file and opens it in the browser instead of showing the TUI.
@@ -193,12 +226,24 @@ It needs no terminal. It combines with `--exclude`: the page lists the skills th
 
 The page has the same information as the TUI:
 
-- Header: repository URL, ref, short commit SHA, skill count, invalid count. The full commit SHA shows as hover text on the short one. When `--exclude` skipped files, the counts end with `, K excluded`: `5 skills, 1 invalid, 1 excluded`. Without exclusions the page omits it.
+- Header: repository URL, ref, short commit SHA, skill count, invalid count. With several repositories, see [Several repositories](#several-repositories-in-the-report). The full commit SHA shows as hover text on the short one. When `--exclude` skipped files, the counts end with `, K excluded`: `5 skills, 1 invalid, 1 excluded`. Without exclusions the page omits it.
 - Contents: a list that links to each skill. Invalid skills have an `invalid` badge.
 - Skill sections: `name`, path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields (Claude Code fields under their own `Claude Code` heading, like the TUI detail pane), and validation errors for invalid skills. Below that, the full Markdown body, rendered.
 - A scan with no skills shows `No skills found`. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
 - The list shows the directory name when a skill has no usable `name`.
 - A filter box narrows the page to matching skills. See [Filter](#filter).
+
+### Several repositories in the report
+
+- The `<h1>` reads `N repositories`, followed by the totals line. There is no single ref or SHA line.
+- Contents are grouped by repository. Each group has a heading with the repository name, ref, short SHA (the full SHA is the hover text) and its own counts, e.g. `2 skills, 1 invalid, 1 excluded`.
+- A repository with no skills shows `No skills found` (or `No skills found (2 excluded)`) in the contents. It has no skill sections.
+- A repository that failed shows in the contents and as a section group, each with the heading (`failed` in place of the counts) and the error message as a note. The heading has no short SHA when the clone did not finish. Like the empty-repository note, the note hides while a filter is active. The message is escaped and has no escape sequences.
+- The totals line ends with `, Z failed` when Z repositories failed.
+- Skill sections sit under a heading per repository. Section ids are `repo-<R>-skill-<N>`, counted from 1. With 1 repository the ids stay `skill-<N>`.
+- Heading levels nest: the page title is `h1`, repository headings are `h2` and skill names `h3`. Headings in a body keep the same offset below the skill name as with 1 repository. Levels stop at `h6`.
+- The filter also matches the repository name. A repository group hides when none of its skills match. `Skills N/M` counts the skills in all repositories.
+- The page still has 1 script, the filter.
 
 ### Filter
 
@@ -244,6 +289,6 @@ After the scan, and after the tool deletes the clone, it writes the page to a ne
 ### Exit codes
 
 - 0: the tool wrote the report and launched the browser, or warned that the launch failed.
-- 1: the scan failed, or the tool couldn't write the report file.
-- 2: usage error.
-- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM` during the clone.
+- 1: a repository failed to clone or scan, or the tool couldn't write the report file. With several repositories, the tool still shows the ones that worked (TUI or report) and exits 1 afterwards. If every repository failed, there is no TUI and no report file.
+- 2: usage error, including the same repository and ref given twice.
+- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM` during the clones.

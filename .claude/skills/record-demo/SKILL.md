@@ -34,6 +34,7 @@ A full run takes about 1 minute. Each mode clones the demo repo once.
 Environment variables:
 
 - `DEMO_URL`, `DEMO_REF`: repo and tag to scan. Default `https://github.com/zcaceres/skills.git` at `zoom@1.0.1`: 61 skills, 2 invalid, and several Claude Code fields.
+- `DEMO_ARGS`: scan arguments, split on spaces. Replaces `<DEMO_URL>#<DEMO_REF>` in both modes, e.g. for several URLs.
 - `DEMO_QUERY`: filter text, default `laconic`, a skill with 3 Claude Code fields.
 - `DEMO_OUT`: output dir, default `<checkout>/docs/demo`.
 - `DEMO_SRC`: checkout to build, default the current git root.
@@ -67,7 +68,7 @@ GIFs come out at about 3MB. GitHub renders images up to 10MB in READMEs and PRs.
 Copy `assets/tui-tour.tape`, edit the copy, and pass its path to `demo.sh tui`. Write tapes with the Write tool. A heredoc through the aliased `cat` on this machine injects ANSI codes. `demo.sh` fills these placeholders:
 
 - `{{BIN}}`: dir holding the fresh binary. The hidden setup puts it on `PATH`.
-- `{{CMD}}`: `skill-atlas scan --ref <ref> <url>`.
+- `{{CMD}}`: `skill-atlas scan <url>#<ref>`, or `skill-atlas scan <DEMO_ARGS>`.
 - `{{OUT}}`: output dir. Quote paths: `Output "{{OUT}}/x.gif"`. vhs rejects unquoted absolute paths.
 - `{{QUERY}}`: `DEMO_QUERY`.
 
@@ -83,6 +84,15 @@ Hide / Show                     # stop and resume capture
 Wait+Screen@120s /regex/        # wait until the screen matches
 Screenshot "{{OUT}}/name.png"
 ```
+
+`assets/multi-repo.tape` records a scan of several repos: list, the step from one repo's group into the next, a filter across them, and the exit code after quitting. Run it with 2 URLs, plus a repo that doesn't exist to show partial results:
+
+```shell
+DEMO_ARGS='https://github.com/JetBrains/ideavim.git#2.47.1 https://github.com/JetBrains/no-such-repo.git https://github.com/zcaceres/skills.git#zoom@1.0.1' \
+DEMO_QUERY=docs .claude/skills/record-demo/scripts/demo.sh tui .claude/skills/record-demo/assets/multi-repo.tape
+```
+
+It writes `tui-multi.gif`, `tui-multi.mp4`, `tui-multi-list.png`, `tui-multi-boundary.png`, `tui-multi-filter.png` and `tui-multi-exit.png`. With the 3 URLs above the header should read `67 skills, 2 invalid, 1 failed` and the exit code is 1. With several repos the filter also matches the repo name, so a query like `git` matches every skill from `github.com`. `demo.sh html` records a partial result too: exit 1 with a `Report:` line counts as success.
 
 Keep the `Hide` / `Wait+Screen` / `Show` block after the scan command. It waits for the header (`N skills, M invalid`) and cuts the clone time out of the recording. TUI keys: j/k or arrows move, Tab switches focus, `/` filters (Enter keeps, Esc clears), q quits.
 
@@ -100,4 +110,10 @@ Use `color_scheme="dark"` on the context for dark mode and `full_page=True` on `
 
 ## After recording
 
-`docs/demo/` stays untracked. Tell the user the file paths and sizes, and let them decide what to commit or where to upload. `gh` can't attach images to a PR description. The user drags them into the GitHub editor, or commits them and links the raw URL.
+`docs/demo/` stays untracked. To put media in a PR, reference the local paths in the body and pass each file to `--attach` (gh 2.101.0 or later, push access needed). gh uploads them and rewrites the references:
+
+```shell
+gh pr edit <n> --body-file body.md --attach docs/demo/tui-multi.mp4 --attach docs/demo/tui-multi-list.png
+```
+
+Put a video's `![](docs/demo/x.mp4)` alone in its paragraph so it renders as a player. `gh pr create` and `gh pr comment` take `--attach` too.

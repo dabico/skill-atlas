@@ -15,6 +15,8 @@ url=${DEMO_URL:-https://github.com/zcaceres/skills.git}
 ref=${DEMO_REF:-zoom@1.0.1}
 out=${DEMO_OUT:-$root/docs/demo}
 query=${DEMO_QUERY:-laconic}
+# DEMO_ARGS replaces the scan arguments, e.g. several URLs; split on spaces.
+if [[ -n ${DEMO_ARGS:-} ]]; then read -ra scan_args <<<"$DEMO_ARGS"; else scan_args=("$url#$ref"); fi
 
 need() { command -v "$1" >/dev/null || { echo "demo.sh: $1 not found. $2" >&2; exit 1; }; }
 need go "Install Go."
@@ -32,7 +34,7 @@ echo "built skill-atlas from $root"
 esc() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
 
 tui() {
-	local tapes=("$@") cmd="skill-atlas scan --ref $ref $url"
+	local tapes=("$@") cmd="skill-atlas scan ${scan_args[*]}"
 	[[ ${#tapes[@]} -gt 0 ]] || tapes=("$skill/assets/tui-tour.tape")
 	for t in "${tapes[@]}"; do
 		local filled
@@ -47,13 +49,15 @@ tui() {
 }
 
 html() {
-	local log="$work/html.log" report
-	if ! BROWSER=true TMPDIR="$work" "$work/bin/skill-atlas" scan --html --ref "$ref" "$url" >/dev/null 2>"$log"; then
+	local log="$work/html.log" report code=0
+	BROWSER=true TMPDIR="$work" "$work/bin/skill-atlas" scan --html "${scan_args[@]}" >/dev/null 2>"$log" || code=$?
+	report=$(sed -n 's/^Report: //p' "$log")
+	# Exit 1 with a report means some repos failed; the page still shows the rest.
+	if ((code > 1)) || [[ ! -f $report ]]; then
+		echo "demo.sh: skill-atlas exited $code without a report:" >&2
 		cat "$log" >&2
 		exit 1
 	fi
-	report=$(sed -n 's/^Report: //p' "$log")
-	[[ -f $report ]] || { echo "demo.sh: no report path in output:" >&2; cat "$log" >&2; exit 1; }
 	uv run --quiet "$here/html.py" "$report" "$out" "$query"
 }
 

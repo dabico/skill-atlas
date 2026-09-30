@@ -93,7 +93,7 @@ func TestClaudeCodeFields(t *testing.T) {
 func TestHTMLClaudeFields(t *testing.T) {
 	t.Parallel()
 	f := claudeSkills
-	r := runHTML(t, requireTool(t, "true"), nil, "--ref", f.tag, f.url)
+	r := runHTML(t, requireTool(t, "true"), nil, f.url+"#"+f.tag)
 	if r.code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
 	}
