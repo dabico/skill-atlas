@@ -6,11 +6,15 @@ type: project
 
 # Open items
 
-Last updated 2026-09-30. `main` is at `14db057` (PRs #1, #2 and #3 merged).
+Last updated 2026-09-30. `main` is at `17002dd`: PRs #1 to #4 merged, then the maintainer committed `README.md`, `AGENTS.md` (`CLAUDE.md` symlinks to it), `memory/`, `.gitignore` and a PR template.
 
 ## Open PRs
 
-- **#4 "Show Claude Code fields in the HTML report"** (`feature/html-extensions`, head `d419e95`). CI green, waiting for the maintainer's review. After merge, remove the `.claude/worktrees/codex-stack` worktree and the `feature/html-extensions` branch.
+None. Worktrees and feature branches are gone.
+
+## Uncommitted
+
+- `.claude/skills/record-demo/`: local skill that records TUI and HTML demos into `docs/demo/`. Neither is committed; the maintainer decides.
 
 ## Known bugs
 
