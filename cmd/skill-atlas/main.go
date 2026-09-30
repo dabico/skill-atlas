@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/term"
 
+	"skill-atlas/internal/htmlreport"
 	"skill-atlas/internal/repo"
 	"skill-atlas/internal/scan"
 	"skill-atlas/internal/tui"
@@ -50,7 +51,7 @@ func runScan(cmd command, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "skill-atlas: %v\n", err)
 		return exitFail
 	}
-	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+	if !cmd.html && (!term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd()))) {
 		fmt.Fprintln(stderr, "skill-atlas: scan needs an interactive terminal")
 		return exitFail
 	}
@@ -80,9 +81,15 @@ func runScan(cmd command, stderr io.Writer) int {
 		return failure(stderr, err)
 	}
 
-	// Results are in memory; drop the clone and release Ctrl+C for the TUI.
+	// Results are in memory; drop the clone and release Ctrl+C.
 	os.RemoveAll(dir)
 	stop()
+	if cmd.html {
+		if err := showHTML(target, checkout, res, htmlreport.OpenBrowser, stderr); err != nil {
+			return failure(stderr, err)
+		}
+		return exitOK
+	}
 
 	err = tui.Run(tui.Report{
 		Repo:     target.Display,

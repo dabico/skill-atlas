@@ -10,9 +10,10 @@ import (
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
+  skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
 
 Flags:
+  --html               open the results as an HTML file in the web browser instead of the TUI
   --ref <branch|tag>   branch or tag to scan (default: remote's default branch)
   --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
   -h, --help           show this help
@@ -30,6 +31,7 @@ type command struct {
 	action  action
 	url     string
 	ref     string
+	html    bool
 	exclude []string // --exclude patterns, in order
 }
 
@@ -56,6 +58,7 @@ func parseScan(args []string) (command, error) {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	ref := fs.String("ref", "", "")
+	html := fs.Bool("html", false, "")
 	var exclude stringList
 	fs.Var(&exclude, "exclude", "")
 
@@ -90,5 +93,5 @@ func parseScan(args []string) (command, error) {
 	case len(urls) > 1:
 		return command{}, &usageError{msg: "scan takes exactly one git url"}
 	}
-	return command{action: actionScan, url: urls[0], ref: *ref, exclude: exclude}, nil
+	return command{action: actionScan, url: urls[0], ref: *ref, html: *html, exclude: exclude}, nil
 }

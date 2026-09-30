@@ -78,12 +78,13 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 ## Scan command
 
 ```shell
-skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
+skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
 ```
 
 - The first version accepts 1 remote Git URL, over HTTPS or SSH. Local paths aren't supported.
 - Without `--ref`, the scan uses the remote's default branch (`HEAD`).
 - `--ref` takes a branch or tag name. Commit SHAs aren't supported. An unknown ref fails the scan with an error.
+- `--html` writes the results to an HTML file and opens it in the web browser instead of showing the TUI. See [HTML report](#html-report).
 - `--exclude` skips `SKILL.md` files by path. The flag is repeatable.
 - Details are under [Excluded paths](#excluded-paths).
 - Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
@@ -121,15 +122,15 @@ Pass the flag more than once to add patterns. Both `--exclude <pattern>` and `--
 
 Excluded files are counted and never parsed.
 Symlinks and `.git/` stay ignored and aren't counted.
-The TUI shows the count (see [TUI](#tui)).
+The TUI and the HTML report show the count (see [TUI](#tui) and [HTML report](#html-report)).
 
 Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' <git-url>`.
 
 ### State
 
-The tool stores no state.
+The tool stores no state, with 1 exception: the HTML report file (see [Delivery](#delivery)).
 The clone goes into a temporary directory, which gets deleted before the tool exits.
-Results are discarded after the scan.
+Results are discarded after the scan. `--html` keeps the report file in the OS temp directory.
 
 ## TUI
 
@@ -157,3 +158,65 @@ Split view: skill list on the left, details of the selected skill on the right.
 - A scan with no skills shows `No skills found` in the list pane. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
 - The list shows the directory name when a skill has no usable `name`.
 - Footer: key hints.
+
+## HTML report
+
+`skill-atlas scan --html <git-url>` writes the results to an HTML file and opens it in the browser instead of showing the TUI.
+It needs no terminal. It combines with `--exclude`: the page lists the skills that remain and counts the excluded files.
+
+The page has the same information as the TUI:
+
+- Header: repository URL, ref, short commit SHA, skill count, invalid count. The full commit SHA shows as hover text on the short one. When `--exclude` skipped files, the counts end with `, K excluded`: `5 skills, 1 invalid, 1 excluded`. Without exclusions the page omits it.
+- Contents: a list that links to each skill. Invalid skills have an `invalid` badge.
+- Skill sections: `name`, path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields, and validation errors for invalid skills. Below that, the full Markdown body, rendered.
+- A scan with no skills shows `No skills found`. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
+- The list shows the directory name when a skill has no usable `name`.
+- A filter box narrows the page to matching skills. See [Filter](#filter).
+
+### Filter
+
+The box matches the TUI <kbd>/</kbd> filter.
+
+- It keeps the skills whose name (or directory name), description or path contains the typed text. The match ignores case.
+- The contents list and the skill sections both narrow.
+- While the box has text, a line shows `Skills N/M`, with N matching and M total. At 0 matches the page shows `No matching skills`.
+- <kbd>/</kbd> focuses the box unless focus is already in a text field. <kbd>Esc</kbd> clears the box and restores every skill.
+- The filter is for reading. It doesn't change the report file or the order of skills.
+- Without JavaScript the box is hidden and the page shows every skill.
+
+A text box can't be filtered with CSS alone. CSS selectors see the `value` attribute, which doesn't change while the user types, and `:placeholder-shown` only tells empty from non-empty. A script is the smallest way to read the typed text.
+
+### Page
+
+- The page is 1 HTML document with inline CSS. It makes no external requests: no remote fonts, scripts, styles or images.
+- The page has 1 inline script, which runs the [filter](#filter). It reads the typed text and the `data-match` attribute of each skill, toggles the `hidden` attribute and sets text with `textContent`. It makes no network calls and uses no `eval` or `innerHTML`. It never writes skill content into the page. A page with no skills has no script.
+- A Content Security Policy enforces this. With skills: `default-src 'none'; script-src 'sha256-<hash>'; style-src 'unsafe-inline'; img-src data:`. The tool computes the hash from the exact script text. The policy has no `'unsafe-inline'` for scripts, so the browser blocks any other script. Without skills the policy has no `script-src`.
+- Colors follow the browser's light or dark setting. The layout fits a phone screen.
+- The Markdown body uses GitHub Flavored Markdown. Headings in the body sit 2 levels below the skill `name`.
+- Raw HTML in a body is dropped.
+- A link with a scheme other than `http`, `https` or `mailto` shows as plain text. This covers `javascript:`, `vbscript:`, `data:` and `file:`.
+- Images aren't loaded. The page shows their alt text.
+
+### Delivery
+
+After the scan, and after the tool deletes the clone, it writes the page to a new file in the OS temp directory. The file is named `skill-atlas-report-<random>.html` and is readable by its owner only.
+
+- The tool prints `Report: <absolute path>` to stderr.
+- The tool opens the file in the browser as a `file://` URL, then exits with 0.
+- The file stays after the tool exits, because the browser loads it after the launch command returns. The OS temp cleanup removes it.
+- Each run writes a new file.
+- If the tool can't write the file, the scan fails with an error.
+
+### Browser
+
+- If `$BROWSER` is set, the tool runs it with the URL as its only argument. The tool uses no shell, so `$BROWSER` is 1 program name or path.
+- Otherwise the tool runs `open` on macOS, `rundll32 url.dll,FileProtocolHandler` on Windows and `xdg-open` on other systems.
+- The launch counts as done when the command exits with 0 or is still running after 3 seconds. A command that is the browser itself doesn't hold up the tool.
+- If the command fails to start or exits with a non-zero code within those 3 seconds, the tool prints a warning with the file path and still exits with 0. The report exists, and the user can open it by hand.
+
+### Exit codes
+
+- 0: the tool wrote the report and launched the browser, or warned that the launch failed.
+- 1: the scan failed, or the tool couldn't write the report file.
+- 2: usage error.
+- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM` during the clone.
