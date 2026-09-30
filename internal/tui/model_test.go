@@ -428,3 +428,39 @@ func TestRenderMarkdownFallbackOnBadStyle(t *testing.T) {
 		t.Error("empty render")
 	}
 }
+
+func TestDetailProviderFields(t *testing.T) {
+	skills := testSkills()
+	skills[1].Extensions = []skill.Extension{
+		{Provider: "Claude Code", Key: "argument-hint", Value: "[issue]"},
+		{Provider: "Claude Code", Key: "disable-model-invocation", Value: "true"},
+		{Provider: "Claude Code", Key: "hooks", Value: "PreToolUse (1)"},
+	}
+	m := newTest(skills, 120, 40)
+
+	if v := view(m); strings.Contains(v, "Claude Code") {
+		t.Errorf("skill without provider fields shows the group:\n%s", v)
+	}
+	press(m, "j")
+	v := view(m)
+	for _, want := range []string{
+		"Claude Code:",
+		"  argument-hint: [issue]",
+		"  disable-model-invocation: true",
+		"  hooks: PreToolUse (1)",
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("detail missing %q:\n%s", want, v)
+		}
+	}
+}
+
+func TestDetailProviderFieldsStripEscapes(t *testing.T) {
+	skills := []skill.Skill{{
+		Path: "a/SKILL.md", Dir: "a", Name: "a", Description: "d",
+		Extensions: []skill.Extension{{Provider: "Claude Code", Key: "model", Value: "\x1b[31mred"}},
+	}}
+	if v := newTest(skills, 120, 40).detailContent(80); strings.Contains(v, "\x1b[31m") {
+		t.Errorf("escape sequence kept: %q", v)
+	}
+}

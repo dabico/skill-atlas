@@ -8,6 +8,7 @@
     "compatibility": "",
     "allowedTools": "",
     "metadata": [],
+    "extensions": [],
     "errors": [],
     "valid": true,
     "bodySha256": "2408e1c840f4af0d7b8c53363a797704313c9977990259f9d9fddcf6b3700e85"
@@ -21,6 +22,7 @@
     "compatibility": "",
     "allowedTools": "",
     "metadata": [],
+    "extensions": [],
     "errors": [],
     "valid": true,
     "bodySha256": "6e132c5dc7d13164940e98c5e3ce5fe96ec7c1aca9e9fbd49719805cd83d156a"
@@ -34,6 +36,7 @@
     "compatibility": "",
     "allowedTools": "",
     "metadata": [],
+    "extensions": [],
     "errors": [],
     "valid": true,
     "bodySha256": "515017b7cdcd08fb44d8bb89144874d65acf0708081d96899faed7dcdfb88380"
@@ -47,6 +50,7 @@
     "compatibility": "",
     "allowedTools": "",
     "metadata": [],
+    "extensions": [],
     "errors": [],
     "valid": true,
     "bodySha256": "8b1a12f2110c49085e7328bd3f001d83a51b1d6bf90c00f079aa218bc8a3a026"
@@ -60,6 +64,7 @@
     "compatibility": "",
     "allowedTools": "",
     "metadata": [],
+    "extensions": [],
     "errors": [],
     "valid": true,
     "bodySha256": "08f37ee76f380fe7055f72e7e815612188290a61c24fc897ee94a08753f1b2cd"
@@ -73,6 +78,7 @@
     "compatibility": "",
     "allowedTools": "",
     "metadata": [],
+    "extensions": [],
     "errors": [],
     "valid": true,
     "bodySha256": "d037ca9da5256437ce44798d12b895014add2645903b4546086265b562774828"

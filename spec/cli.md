@@ -43,7 +43,7 @@ skill-name/
 | `license`       | No       | License name, or the path to a bundled license file.                                                                                                                 |
 | `compatibility` | No       | 1-500 characters. Environment requirements, e.g. target product, system packages, network access.                                                                    |
 | `metadata`      | No       | Map of string keys to string values.                                                                                                                                 |
-| `allowed-tools` | No       | Space-separated list of pre-approved tools. Experimental.                                                                                                            |
+| `allowed-tools` | No       | Space-separated list of pre-approved tools, or a YAML list of strings. Experimental.                                                                                 |
 
 Minimal valid `SKILL.md`:
 
@@ -55,6 +55,33 @@ description: Extract PDF text, fill forms, merge files. Use when handling PDFs.
 ```
 
 The TUI preview uses the `description` field.
+
+### Claude Code fields
+
+Skill Atlas also accepts the frontmatter fields from the [Claude Code skills documentation](https://code.claude.com/docs/en/skills).
+A skill that uses them stays valid when the values have the right type. A wrong type is an error, e.g. `effort must be one of: low, medium, high, xhigh, max`.
+
+| Field                      | Type                                                          |
+|----------------------------|---------------------------------------------------------------|
+| `when_to_use`              | String                                                        |
+| `argument-hint`            | String                                                        |
+| `arguments`                | String or list of strings                                     |
+| `disable-model-invocation` | Boolean                                                       |
+| `user-invocable`           | Boolean                                                       |
+| `disallowed-tools`         | String or list of strings                                     |
+| `model`                    | String                                                        |
+| `effort`                   | One of `low`, `medium`, `high`, `xhigh`, `max`                |
+| `context`                  | `fork`                                                        |
+| `agent`                    | String                                                        |
+| `background`               | Boolean                                                       |
+| `hooks`                    | Mapping. The contents aren't checked.                         |
+| `paths`                    | String or list of strings                                     |
+| `shell`                    | One of `bash`, `powershell`                                   |
+
+- Booleans also accept `yes`, `no`, `on`, `off`, `1` and `0`, in any letter case, like Claude Code does. The result shows `true` or `false`.
+- A field with an empty (null) value counts as absent.
+- The TUI detail pane lists these fields under a `Claude Code` heading, in file order, after the specification fields. A list shows as comma-separated values, and `hooks` shows each event with its handler count, e.g. `PreToolUse (1)`.
+- Fields that no tool documents, e.g. `type`, stay unexpected fields (see [Validation details](#validation-details)).
 
 ### Invalid skills
 
@@ -70,7 +97,7 @@ Each invalid skill lists every rule it breaks, e.g.:
 
 Where the specification page is silent, Skill Atlas matches the [skills-ref](https://github.com/agentskills/agentskills/tree/main/skills-ref) reference validator:
 
-- Top-level fields outside the 6 above are errors, e.g. `unexpected fields: argument-hint, model`.
+- Top-level fields outside the 6 above and the [Claude Code fields](#claude-code-fields) are errors, e.g. `unexpected fields: type, version`.
 - YAML scalars are read as strings, so `version: 1.0` in `metadata` is the string `"1.0"`.
 - `name` is NFKC-normalized before the checks, and "lowercase letters and digits" includes non-ASCII ones.
 - For a `SKILL.md` at the repository root, the parent directory name is the repository name from the URL.
@@ -150,7 +177,7 @@ Split view: skill list on the left, details of the selected skill on the right.
 
 - Header: repository URL, ref, short commit SHA, skill count, invalid count. When the scan excluded any `SKILL.md`, the counts also show the excluded count, e.g. `2 skills, 0 invalid, 2 excluded`. Without exclusions the header has no excluded count.
 - List pane: skill `name`, with an `[invalid]` badge on invalid skills.
-- Detail pane: path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields, and validation errors for invalid skills. Below that, the full Markdown body, rendered.
+- Detail pane: path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields (Claude Code fields under their own heading), and validation errors for invalid skills. Below that, the full Markdown body, rendered.
 - <kbd>Tab</kbd> switches focus between the panes. j/k scroll the detail pane while it has focus.
 - <kbd>/</kbd> filters the list by name, description and path. <kbd>Esc</kbd> clears the filter.
 - <kbd>q</kbd> or <kbd>Ctrl+C</kbd> quits.
