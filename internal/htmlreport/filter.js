@@ -5,8 +5,9 @@
   var none = document.getElementById("nomatch");
   var items = document.querySelectorAll("[data-match]");
   var total = document.querySelectorAll("section[data-match]").length;
+  var groups = document.querySelectorAll("[data-group]");
 
-  // Same rule as the TUI: case-insensitive substring of name, description or path.
+  // Same rule as the TUI: case-insensitive substring of name, description, path or repository.
   function apply() {
     var f = q.value.toLowerCase();
     var shown = 0;
@@ -14,6 +15,10 @@
       var hit = f === "" || items[i].dataset.match.toLowerCase().indexOf(f) !== -1;
       items[i].hidden = !hit;
       if (hit && items[i].tagName === "SECTION") shown++;
+    }
+    // A repository group shows only while one of its skills does.
+    for (var g = 0; g < groups.length; g++) {
+      groups[g].hidden = f !== "" && groups[g].querySelector("[data-match]:not([hidden])") === null;
     }
     count.hidden = f === "";
     count.textContent = "Skills " + shown + "/" + total;
