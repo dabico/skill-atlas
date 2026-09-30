@@ -78,15 +78,14 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 ## Scan command
 
 ```shell
-skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... [--include-tests] <git-url>
+skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
 ```
 
 - The first version accepts 1 remote Git URL, over HTTPS or SSH. Local paths aren't supported.
 - Without `--ref`, the scan uses the remote's default branch (`HEAD`).
 - `--ref` takes a branch or tag name. Commit SHAs aren't supported. An unknown ref fails the scan with an error.
 - `--exclude` skips `SKILL.md` files by path. The flag is repeatable.
-- `--include-tests` scans skills in test directories too.
-- Both flags are described under [Excluded paths](#excluded-paths).
+- Details are under [Excluded paths](#excluded-paths).
 - Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
 - Clones are shallow (depth 1). The scan doesn't need history.
 - The results show the commit SHA that was scanned.
@@ -107,34 +106,9 @@ Each skill appears once, at its real path, and the scan never reads outside the 
 
 ### Excluded paths
 
-Repositories keep example skills in test data, for instance under `src/jvmTest/resources/skills/`.
-The scan skips these by default and counts them.
+Without `--exclude`, the scan reads every `SKILL.md`.
 
-A `SKILL.md` is excluded when any of these holds:
-
-- A directory above the skill's own directory is a test directory.
-- Its path matches an `--exclude` pattern.
-
-Excluded files are counted and never parsed.
-Symlinks and `.git/` stay ignored and aren't counted.
-The TUI shows the count (see [TUI](#tui)).
-
-#### Test directories
-
-The scan checks every directory between the repository root and the skill's own directory.
-The skill's own directory name is never checked, so `.claude/skills/tests/SKILL.md` and `.claude/skills/tests-maintenance/SKILL.md` stay.
-
-A directory is a test directory when its name:
-
-- Equals `test`, `tests`, `testdata`, `test-data`, `test_data`, `testfixtures`, `__tests__`, `fixtures` or `__fixtures__`, in any letter case.
-- Ends in `Test` or `Tests` right after a lowercase letter or digit, e.g. `jvmTest`, `commonTest`, `integrationTest`. These are Kotlin and Gradle source sets.
-- Ends in `-test`, `-tests`, `_test` or `_tests`, in any letter case, e.g. `integration-tests`, `e2e_tests`.
-
-`--include-tests` turns this rule off. `--exclude` patterns still apply.
-
-#### The `--exclude` flag
-
-`--exclude <pattern>` takes a [gitignore](https://git-scm.com/docs/gitignore#_pattern_format) pattern.
+`--exclude <pattern>` skips the `SKILL.md` files that match a [gitignore](https://git-scm.com/docs/gitignore#_pattern_format) pattern.
 Pass the flag more than once to add patterns. Both `--exclude <pattern>` and `--exclude=<pattern>` work.
 
 - Patterns match the `SKILL.md` path relative to the repository root, with `/` separators.
@@ -143,8 +117,13 @@ Pass the flag more than once to add patterns. Both `--exclude <pattern>` and `--
 - `**` matches any number of directories: `**/old`, `skills/**/draft`. It must fill a whole path segment, so `a**b` is an error.
 - A pattern that matches a directory excludes everything below it. A trailing `/` limits the pattern to directories.
 - A leading `!` re-includes paths that an earlier pattern matched. The last matching pattern wins. Unlike git, `!` can re-include a file inside an excluded directory.
-- `!` patterns only undo other `--exclude` patterns. They don't override the test-directory rule.
-- An empty or malformed pattern is a usage error (exit 2).
+- An empty or malformed pattern is a usage error (exit 2), reported before the clone starts.
+
+Excluded files are counted and never parsed.
+Symlinks and `.git/` stay ignored and aren't counted.
+The TUI shows the count (see [TUI](#tui)).
+
+Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' <git-url>`.
 
 ### State
 

@@ -10,12 +10,11 @@ import (
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... [--include-tests] <git-url>
+  skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
 
 Flags:
   --ref <branch|tag>   branch or tag to scan (default: remote's default branch)
   --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
-  --include-tests      scan skills in test directories too (default: skipped)
   -h, --help           show this help
 `
 
@@ -28,11 +27,10 @@ const (
 
 // command is the result of parsing the command line.
 type command struct {
-	action       action
-	url          string
-	ref          string
-	exclude      []string // --exclude patterns, in order
-	includeTests bool
+	action  action
+	url     string
+	ref     string
+	exclude []string // --exclude patterns, in order
 }
 
 // usageError is a bad command line; msg may be empty when only usage is shown.
@@ -60,7 +58,6 @@ func parseScan(args []string) (command, error) {
 	ref := fs.String("ref", "", "")
 	var exclude stringList
 	fs.Var(&exclude, "exclude", "")
-	includeTests := fs.Bool("include-tests", false, "")
 
 	var urls []string
 	for {
@@ -93,5 +90,5 @@ func parseScan(args []string) (command, error) {
 	case len(urls) > 1:
 		return command{}, &usageError{msg: "scan takes exactly one git url"}
 	}
-	return command{action: actionScan, url: urls[0], ref: *ref, exclude: exclude, includeTests: *includeTests}, nil
+	return command{action: actionScan, url: urls[0], ref: *ref, exclude: exclude}, nil
 }

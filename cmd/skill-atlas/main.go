@@ -75,7 +75,7 @@ func runScan(cmd command, stderr io.Writer) int {
 	if err != nil {
 		return failure(stderr, err)
 	}
-	res, err := scan.Dir(dir, target.Name, scan.Options{IncludeTests: cmd.includeTests, Exclude: cmd.exclude})
+	res, err := scan.Dir(dir, target.Name, scan.Options{Exclude: cmd.exclude})
 	if err != nil {
 		return failure(stderr, err)
 	}
