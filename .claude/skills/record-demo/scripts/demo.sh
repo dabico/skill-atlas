@@ -49,13 +49,15 @@ tui() {
 }
 
 html() {
-	local log="$work/html.log" report
-	if ! BROWSER=true TMPDIR="$work" "$work/bin/skill-atlas" scan --html "${scan_args[@]}" >/dev/null 2>"$log"; then
+	local log="$work/html.log" report code=0
+	BROWSER=true TMPDIR="$work" "$work/bin/skill-atlas" scan --html "${scan_args[@]}" >/dev/null 2>"$log" || code=$?
+	report=$(sed -n 's/^Report: //p' "$log")
+	# Exit 1 with a report means some repos failed; the page still shows the rest.
+	if ((code > 1)) || [[ ! -f $report ]]; then
+		echo "demo.sh: skill-atlas exited $code without a report:" >&2
 		cat "$log" >&2
 		exit 1
 	fi
-	report=$(sed -n 's/^Report: //p' "$log")
-	[[ -f $report ]] || { echo "demo.sh: no report path in output:" >&2; cat "$log" >&2; exit 1; }
 	uv run --quiet "$here/html.py" "$report" "$out" "$query"
 }
 

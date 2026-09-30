@@ -29,12 +29,12 @@ Show
 Sleep 2s
 Screenshot "{{OUT}}/tui-multi-list.png"
 
-# Walk from the first repo into the second; the cursor skips the heading.
+# Walk from the first repo into the next; the cursor skips headings and error rows.
 Down@500ms 6
 Sleep 2s
 Screenshot "{{OUT}}/tui-multi-boundary.png"
 
-# Filter across both repos.
+# Filter across the repos.
 Type "/"
 Sleep 300ms
 Type@150ms "{{QUERY}}"
@@ -46,4 +46,11 @@ Screenshot "{{OUT}}/tui-multi-filter.png"
 Escape
 Sleep 1s
 Type "q"
-Sleep 500ms
+Sleep 800ms
+
+# Failure lines stay on stderr; the exit code is 1 if any repo failed.
+Type 'echo "exit $?"'
+Enter
+Sleep 2s
+Screenshot "{{OUT}}/tui-multi-exit.png"
+Sleep 1s
