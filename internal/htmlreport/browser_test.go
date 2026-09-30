@@ -10,7 +10,7 @@ import (
 )
 
 func TestBrowserCommand(t *testing.T) {
-	const u = "http://127.0.0.1:1234/abc?a=b&c=d"
+	const u = "file:///tmp/skill-atlas-report-1.html"
 	tests := []struct {
 		name     string
 		goos     string
@@ -53,7 +53,7 @@ func TestOpenBrowserUsesEnv(t *testing.T) {
 	t.Setenv("BROWSER", script)
 	t.Setenv("FAKE_OUT", out)
 
-	const u = "http://127.0.0.1:1234/abc?a=b&c=d;echo hacked"
+	const u = "file:///tmp/a%20b/r.html?x=1&y=2;echo hacked"
 	if err := OpenBrowser(u); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,52 @@ func TestOpenBrowserUsesEnv(t *testing.T) {
 
 func TestOpenBrowserMissingProgram(t *testing.T) {
 	t.Setenv("BROWSER", filepath.Join(t.TempDir(), "no-such-browser"))
-	if err := OpenBrowser("http://127.0.0.1:1/x"); err == nil {
+	if err := OpenBrowser("file:///tmp/x.html"); err == nil {
 		t.Error("OpenBrowser returned nil for a program that doesn't exist")
 	}
+}
+
+// script writes an executable shell script and returns its path.
+func script(t *testing.T, body string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("needs a POSIX shell script")
+	}
+	p := filepath.Join(t.TempDir(), "fake")
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestLaunch(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wait    time.Duration
+		wantErr bool
+		maxTook time.Duration
+	}{
+		{"exits 0", "exit 0", 10 * time.Second, false, 5 * time.Second},
+		{"exits 1", "exit 1", 10 * time.Second, true, 5 * time.Second},
+		{"still running counts as launched", "sleep 30", 100 * time.Millisecond, false, 5 * time.Second},
+		{"exits 1 after the window counts as launched", "sleep 1; exit 1", 100 * time.Millisecond, false, 900 * time.Millisecond},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			start := time.Now()
+			err := launch(script(t, tt.body), nil, tt.wait)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("launch error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if took := time.Since(start); took > tt.maxTook {
+				t.Errorf("launch took %s, want under %s", took, tt.maxTook)
+			}
+		})
+	}
+	t.Run("missing program", func(t *testing.T) {
+		if err := launch(filepath.Join(t.TempDir(), "nope"), nil, time.Second); err == nil {
+			t.Error("launch returned nil for a missing program")
+		}
+	})
 }

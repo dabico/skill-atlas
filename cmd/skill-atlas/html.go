@@ -1,7 +1,7 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"io"
 
 	"skill-atlas/internal/htmlreport"
@@ -9,8 +9,8 @@ import (
 	"skill-atlas/internal/skill"
 )
 
-// showHTML renders the scan and serves the page to the browser until it loads or ctx ends.
-func showHTML(ctx context.Context, target repo.Target, checkout repo.Checkout, skills []skill.Skill, stderr io.Writer) error {
+// showHTML writes the report to a temp file and opens it with open. A failed open only warns.
+func showHTML(target repo.Target, checkout repo.Checkout, skills []skill.Skill, open func(url string) error, stderr io.Writer) error {
 	page, err := htmlreport.Render(htmlreport.Report{
 		Repo:   target.Display,
 		Ref:    checkout.Ref,
@@ -20,5 +20,13 @@ func showHTML(ctx context.Context, target repo.Target, checkout repo.Checkout, s
 	if err != nil {
 		return err
 	}
-	return htmlreport.Serve(ctx, page, htmlreport.OpenBrowser, stderr)
+	path, err := htmlreport.WriteFile(page)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stderr, "Report: %s\n", path)
+	if err := open(htmlreport.FileURL(path)); err != nil {
+		fmt.Fprintf(stderr, "skill-atlas: couldn't open a browser: %v\nOpen the report yourself: %s\n", err, path)
+	}
+	return nil
 }

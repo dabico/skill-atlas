@@ -5,167 +5,108 @@ package e2e
 import (
 	"bytes"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
 
-var reportLine = regexp.MustCompile(`(?m)^Report: (http://127\.0\.0\.1:\d+/[0-9a-f]{32})$`)
+var reportLine = regexp.MustCompile(`(?m)^Report: (.+)$`)
 
-// lockedBuffer is written by exec while the test polls it.
-type lockedBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (l *lockedBuffer) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.b.Write(p)
-}
-
-func (l *lockedBuffer) String() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.b.String()
-}
-
-// htmlProc is one "skill-atlas scan --html" process. It has no TTY: stdin is /dev/null, stdout and stderr are pipes.
-type htmlProc struct {
-	cmd    *exec.Cmd
-	stderr *lockedBuffer
+// htmlRun is one finished "skill-atlas scan --html" process. It has no TTY: stdin is /dev/null, stdout and stderr are pipes.
+type htmlRun struct {
+	code   int
+	stderr string
 	tmpDir string // TMPDIR handed to the binary
-	done   chan struct{}
 }
 
-// startHTML runs "scan --html args..." with BROWSER=browser and extra env entries.
-func startHTML(t *testing.T, browser string, env []string, args ...string) *htmlProc {
+// runHTML runs "scan --html args..." with BROWSER=browser, extra env entries and its own TMPDIR.
+func runHTML(t *testing.T, browser string, env []string, args ...string) htmlRun {
 	t.Helper()
-	p := &htmlProc{stderr: &lockedBuffer{}, tmpDir: mkdir(t, "tmpdir-"), done: make(chan struct{})}
-	p.cmd = exec.Command(binPath, append([]string{"scan", "--html"}, args...)...)
-	p.cmd.Env = append(os.Environ(), append([]string{"TMPDIR=" + p.tmpDir, "BROWSER=" + browser}, env...)...)
-	p.cmd.Stdout = &lockedBuffer{}
-	p.cmd.Stderr = p.stderr
-	if err := p.cmd.Start(); err != nil {
+	tmp := mkdir(t, "tmpdir-")
+	cmd := exec.Command(binPath, append([]string{"scan", "--html"}, args...)...)
+	cmd.Env = append(os.Environ(), append([]string{"TMPDIR=" + tmp, "BROWSER=" + browser}, env...)...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		p.cmd.Wait()
-		close(p.done)
-	}()
-	t.Cleanup(func() {
-		p.cmd.Process.Kill()
-		<-p.done
-	})
-	return p
-}
-
-// exit waits for the process and returns its exit code.
-func (p *htmlProc) exit(t *testing.T, timeout time.Duration) int {
-	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
 	select {
-	case <-p.done:
-	case <-time.After(timeout):
-		t.Fatalf("process didn't exit within %s; stderr:\n%s", timeout, p.stderr)
+	case <-done:
+	case <-time.After(cloneWait + shortWait):
+		cmd.Process.Kill()
+		<-done
+		t.Fatalf("process didn't exit in time; stderr:\n%s", &stderr)
 	}
-	return p.cmd.ProcessState.ExitCode()
+	return htmlRun{code: cmd.ProcessState.ExitCode(), stderr: stderr.String(), tmpDir: tmp}
 }
 
-// reportURL waits for the "Report: <url>" line on stderr.
-func (p *htmlProc) reportURL(t *testing.T, timeout time.Duration) string {
+// reportPath returns the path from the "Report: " line on stderr.
+func (r htmlRun) reportPath(t *testing.T) string {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for {
-		if m := reportLine.FindStringSubmatch(p.stderr.String()); m != nil {
-			return m[1]
-		}
-		select {
-		case <-p.done:
-			t.Fatalf("process exited before printing the report url; stderr:\n%s", p.stderr)
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no report url within %s; stderr:\n%s", timeout, p.stderr)
-		}
-		time.Sleep(pollEvery)
+	m := reportLine.FindStringSubmatch(r.stderr)
+	if m == nil {
+		t.Fatalf("no Report line on stderr:\n%s", r.stderr)
 	}
+	return m[1]
 }
 
-func requireTool(t *testing.T, name string) string {
-	t.Helper()
-	p, err := exec.LookPath(name)
-	if err != nil {
-		if os.Getenv("CI") == "true" {
-			t.Fatalf("%s not found (required when CI=true)", name)
-		}
-		t.Skipf("%s not found", name)
-	}
-	return p
-}
-
-// assertTmpDirClean fails when the binary left a skill-atlas-* entry in dir.
-func assertTmpDirClean(t *testing.T, dir string) {
+// assertOnlyReport fails unless TMPDIR holds the report file and nothing else, i.e. no clone directory is left.
+func assertOnlyReport(t *testing.T, dir, report string) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "skill-atlas-") {
-			t.Errorf("leftover temp entry %s in TMPDIR", e.Name())
+	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), "skill-atlas-report-") || filepath.Base(report) != entries[0].Name() {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
 		}
+		t.Errorf("TMPDIR holds %q, want only %s", names, filepath.Base(report))
 	}
 }
 
-// assertServerGone fails when url still answers.
-func assertServerGone(t *testing.T, url string) {
-	t.Helper()
-	c := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
-	resp, err := c.Get(url)
-	if err == nil {
-		resp.Body.Close()
-		t.Errorf("server still answers at %s: %s", url, resp.Status)
-	}
-}
-
-// TestHTMLReport runs --html without a TTY and lets a curl script stand in for the browser.
+// TestHTMLReport runs --html without a TTY; a shell script stands in for the browser and copies the file it is given.
 func TestHTMLReport(t *testing.T) {
 	t.Parallel()
 	f := ideavim
 	skills := readGolden(t, f.golden)
-	curl := requireTool(t, "curl")
 
-	saved := filepath.Join(mkdir(t, "html-"), "report.html")
-	browser := filepath.Join(mkdir(t, "browser-"), "browser.sh")
-	script := fmt.Sprintf("#!/bin/sh\n%s -fsS -o \"$E2E_REPORT.tmp\" \"$1\" && mv \"$E2E_REPORT.tmp\" \"$E2E_REPORT\"\n", shellQuote(curl))
+	work := mkdir(t, "html-")
+	saved, gotURL := filepath.Join(work, "report.html"), filepath.Join(work, "url")
+	browser := filepath.Join(work, "browser.sh")
+	script := "#!/bin/sh\nprintf '%s' \"$1\" > \"$E2E_URL\" && cp \"${1#file://}\" \"$E2E_REPORT\"\n"
 	if err := os.WriteFile(browser, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	p := startHTML(t, browser, []string{"E2E_REPORT=" + saved}, "--ref", f.tag, f.url)
-	if code := p.exit(t, cloneWait+shortWait); code != 0 {
-		t.Fatalf("exit code = %d, want 0; stderr:\n%s", code, p.stderr)
+	r := runHTML(t, browser, []string{"E2E_REPORT=" + saved, "E2E_URL=" + gotURL}, "--ref", f.tag, f.url)
+	if r.code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
 	}
-	url := p.reportURL(t, shortWait)
-
-	// The script may still be renaming its output when the binary exits.
-	var page []byte
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		var err error
-		if page, err = os.ReadFile(saved); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the browser script saved no report; stderr:\n%s", p.stderr)
-		}
-		time.Sleep(pollEvery)
+	path := r.reportPath(t)
+	if !filepath.IsAbs(path) {
+		t.Errorf("report path %q isn't absolute", path)
+	}
+	if urlArg, _ := os.ReadFile(gotURL); string(urlArg) != "file://"+path {
+		t.Errorf("browser got %q, want file://%s", urlArg, path)
+	}
+	onDisk, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("report file: %v", err)
+	}
+	page, err := os.ReadFile(saved)
+	if err != nil {
+		t.Fatalf("the browser script saved no report; stderr:\n%s", r.stderr)
+	}
+	if !bytes.Equal(page, onDisk) {
+		t.Error("the copy the browser got differs from the file on disk")
 	}
 	html := string(page)
 
@@ -195,24 +136,47 @@ func TestHTMLReport(t *testing.T) {
 	if strings.Contains(strings.ToLower(html), "<script") {
 		t.Error("report has a script element")
 	}
-
-	assertTmpDirClean(t, p.tmpDir)
-	assertServerGone(t, url)
+	assertOnlyReport(t, r.tmpDir, path)
 }
 
-// TestHTMLInterrupt sends SIGINT while the process waits for a browser that never loads the page.
-func TestHTMLInterrupt(t *testing.T) {
+// TestHTMLBrowserFails checks that a browser that can't start or exits non-zero only produces a warning.
+func TestHTMLBrowserFails(t *testing.T) {
 	t.Parallel()
-	noop := requireTool(t, "true")
+	failing := requireTool(t, "false")
+	cases := map[string]string{
+		"exits 1":         failing,
+		"missing program": filepath.Join(mkdir(t, "nobrowser-"), "no-such-browser"),
+	}
+	for name, browser := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r := runHTML(t, browser, nil, "--ref", ideavim.tag, ideavim.url)
+			if r.code != 0 {
+				t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
+			}
+			path := r.reportPath(t)
+			for _, w := range []string{"couldn't open a browser", "Open the report yourself: " + path} {
+				if !strings.Contains(r.stderr, w) {
+					t.Errorf("stderr lacks %q:\n%s", w, r.stderr)
+				}
+			}
+			page, err := os.ReadFile(path)
+			if err != nil || !strings.Contains(string(page), ideavim.display) {
+				t.Errorf("report file unreadable or lacks the repo (err %v)", err)
+			}
+			assertOnlyReport(t, r.tmpDir, path)
+		})
+	}
+}
 
-	p := startHTML(t, noop, nil, "--ref", ideavim.tag, ideavim.url)
-	url := p.reportURL(t, cloneWait)
-	if err := p.cmd.Process.Signal(os.Interrupt); err != nil {
-		t.Fatal(err)
+func requireTool(t *testing.T, name string) string {
+	t.Helper()
+	p, err := exec.LookPath(name)
+	if err != nil {
+		if os.Getenv("CI") == "true" {
+			t.Fatalf("%s not found (required when CI=true)", name)
+		}
+		t.Skipf("%s not found", name)
 	}
-	if code := p.exit(t, 30*time.Second); code != 130 {
-		t.Errorf("exit code = %d, want 130; stderr:\n%s", code, p.stderr)
-	}
-	assertTmpDirClean(t, p.tmpDir)
-	assertServerGone(t, url)
+	return p
 }

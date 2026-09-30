@@ -1,4 +1,4 @@
-// Package htmlreport renders scan results as one self-contained HTML page and serves it once to the local browser.
+// Package htmlreport renders scan results as one self-contained HTML page, writes it to a temp file and opens it in the browser.
 package htmlreport
 
 import (

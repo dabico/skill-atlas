@@ -11,8 +11,8 @@ const usageText = `Usage:
   skill-atlas scan [--html] [--ref <branch|tag>] <git-url>
 
 Flags:
-  --html              show the results as an HTML page in the web browser instead of the TUI
-  --ref<branch|tag>  branch or tag to scan (default: remote's default branch)
+  --html              open the results as an HTML file in the web browser instead of the TUI
+  --ref <branch|tag>  branch or tag to scan (default: remote's default branch)
   -h, --help          show this help
 `
 

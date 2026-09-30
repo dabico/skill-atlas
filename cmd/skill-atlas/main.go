@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/term"
 
+	"skill-atlas/internal/htmlreport"
 	"skill-atlas/internal/repo"
 	"skill-atlas/internal/scan"
 	"skill-atlas/internal/tui"
@@ -80,15 +81,15 @@ func runScan(cmd command, stderr io.Writer) int {
 		return failure(stderr, err)
 	}
 
-	// Results are in memory; drop the clone. Ctrl+C stays ours while --html waits for the browser.
+	// Results are in memory; drop the clone and release Ctrl+C.
 	os.RemoveAll(dir)
+	stop()
 	if cmd.html {
-		if err := showHTML(ctx, target, checkout, skills, stderr); err != nil {
+		if err := showHTML(target, checkout, skills, htmlreport.OpenBrowser, stderr); err != nil {
 			return failure(stderr, err)
 		}
 		return exitOK
 	}
-	stop() // release Ctrl+C for the TUI
 
 	err = tui.Run(tui.Report{
 		Repo:   target.Display,

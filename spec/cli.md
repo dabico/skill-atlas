@@ -84,7 +84,7 @@ skill-atlas scan [--html] [--ref <branch|tag>] <git-url>
 - The first version accepts 1 remote Git URL, over HTTPS or SSH. Local paths aren't supported.
 - Without `--ref`, the scan uses the remote's default branch (`HEAD`).
 - `--ref` takes a branch or tag name. Commit SHAs aren't supported. An unknown ref fails the scan with an error.
-- `--html` shows the results as an HTML page in the web browser instead of the TUI. See [HTML report](#html-report).
+- `--html` writes the results to an HTML file and opens it in the web browser instead of showing the TUI. See [HTML report](#html-report).
 - Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
 - Clones are shallow (depth 1). The scan doesn't need history.
 - The results show the commit SHA that was scanned.
@@ -104,9 +104,9 @@ Each skill appears once, at its real path, and the scan never reads outside the 
 
 ### State
 
-The tool stores no state.
+The tool stores no state, with 1 exception: the HTML report file (see [Delivery](#delivery)).
 The clone goes into a temporary directory, which gets deleted before the tool exits.
-Results are discarded after the scan.
+Results are discarded after the scan. `--html` keeps the report file in the OS temp directory.
 
 ## TUI
 
@@ -137,8 +137,8 @@ Split view: skill list on the left, details of the selected skill on the right.
 
 ## HTML report
 
-`skill-atlas scan --html <git-url>` shows the results as a web page instead of the TUI.
-It needs no terminal.
+`skill-atlas scan --html <git-url>` writes the results to an HTML file and opens it in the browser instead of showing the TUI.
+It needs no terminal. The page is static and has no interactive parts.
 
 The page has the same information as the TUI:
 
@@ -160,23 +160,24 @@ The page has the same information as the TUI:
 
 ### Delivery
 
-The tool writes no file. After the scan, and after it deletes the clone, it serves the page from memory.
+After the scan, and after the tool deletes the clone, it writes the page to a new file in the OS temp directory. The file is named `skill-atlas-report-<random>.html` and is readable by its owner only.
 
-- The server listens on `127.0.0.1` on a random port. The page is at `http://127.0.0.1:<port>/<token>`, where the token is 128 random bits as 32 hex digits. Any other path returns 404.
-- The tool prints `Report: <url>` to stderr, then opens the browser.
-- The server sends the page once. After the browser loads it in full, the server stops and the tool exits with 0.
-- If nothing loads the page within 5 minutes, the scan fails with `the browser didn't load the report within 5m0s`.
-- <kbd>Ctrl+C</kbd> while the tool waits stops it.
+- The tool prints `Report: <absolute path>` to stderr.
+- The tool opens the file in the browser as a `file://` URL, then exits with 0.
+- The file stays after the tool exits, because the browser loads it after the launch command returns. The OS temp cleanup removes it.
+- Each run writes a new file.
+- If the tool can't write the file, the scan fails with an error.
 
 ### Browser
 
 - If `$BROWSER` is set, the tool runs it with the URL as its only argument. The tool uses no shell, so `$BROWSER` is 1 program name or path.
 - Otherwise the tool runs `open` on macOS, `rundll32 url.dll,FileProtocolHandler` on Windows and `xdg-open` on other systems.
-- If the browser fails to start, the tool prints a warning with the URL and keeps waiting. The user can open the URL by hand.
+- The launch counts as done when the command exits with 0 or is still running after 3 seconds. A command that is the browser itself doesn't hold up the tool.
+- If the command fails to start or exits with a non-zero code within those 3 seconds, the tool prints a warning with the file path and still exits with 0. The report exists, and the user can open it by hand.
 
 ### Exit codes
 
-- 0: the browser loaded the report.
-- 1: the scan failed, or the browser didn't load the report in time.
+- 0: the tool wrote the report and launched the browser, or warned that the launch failed.
+- 1: the scan failed, or the tool couldn't write the report file.
 - 2: usage error.
-- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM`.
+- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM` during the clone.
