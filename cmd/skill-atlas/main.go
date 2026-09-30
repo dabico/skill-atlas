@@ -46,10 +46,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func runScan(cmd command, stderr io.Writer) int {
-	target, err := repo.ParseURL(cmd.url)
-	if err != nil {
-		fmt.Fprintf(stderr, "skill-atlas: %v\n", err)
-		return exitFail
+	srcs := make([]source, len(cmd.repos))
+	for i, r := range cmd.repos {
+		target, err := repo.ParseURL(r.url)
+		if err != nil {
+			fmt.Fprintf(stderr, "skill-atlas: %v\n", err)
+			return exitFail
+		}
+		srcs[i] = source{target: target, ref: r.ref}
+	}
+	if msg := duplicate(srcs); msg != "" {
+		fmt.Fprintf(stderr, "skill-atlas: %s\n%s", msg, usageText)
+		return exitUsage
 	}
 	if !cmd.html && (!term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd()))) {
 		fmt.Fprintln(stderr, "skill-atlas: scan needs an interactive terminal")
@@ -66,43 +74,54 @@ func runScan(cmd command, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if cmd.ref != "" {
-		fmt.Fprintf(stderr, "Cloning %s @ %s…\n", target.Display, cmd.ref)
-	} else {
-		fmt.Fprintf(stderr, "Cloning %s…\n", target.Display)
-	}
-
-	checkout, err := repo.Clone(ctx, target, cmd.ref, dir)
-	if err != nil {
-		return failure(stderr, err)
-	}
-	res, err := scan.Dir(dir, target.Name, scan.Options{Exclude: cmd.exclude})
+	results, err := scanAll(ctx, srcs, dir, scan.Options{Exclude: cmd.exclude}, repo.Clone, scan.Dir, stderr)
 	if err != nil {
 		return failure(stderr, err)
 	}
 
-	// Results are in memory; drop the clone and release Ctrl+C.
+	// Results are in memory; drop the clones and release Ctrl+C.
 	os.RemoveAll(dir)
 	stop()
 	if cmd.html {
-		if err := showHTML(target, checkout, res, htmlreport.OpenBrowser, stderr); err != nil {
+		if err := showHTML(results, htmlreport.OpenBrowser, stderr); err != nil {
 			return failure(stderr, err)
 		}
 		return exitOK
 	}
 
-	err = tui.Run(tui.Report{
-		Repo:     target.Display,
-		Ref:      checkout.Ref,
-		SHA:      checkout.SHA,
-		Skills:   res.Skills,
-		Excluded: res.Excluded,
-	})
-	if err != nil {
+	report := tui.Report{Repos: make([]tui.Repo, len(results))}
+	for i, r := range results {
+		report.Repos[i] = tui.Repo{
+			Name:     r.target.Display,
+			Ref:      r.checkout.Ref,
+			SHA:      r.checkout.SHA,
+			Skills:   r.res.Skills,
+			Excluded: r.res.Excluded,
+		}
+	}
+	if err := tui.Run(report); err != nil {
 		return failure(stderr, err)
 	}
 	return exitOK
 }
+
+// duplicate returns an error message for the first repository given twice with the same ref, or "".
+func duplicate(srcs []source) string {
+	seen := map[dupKey]bool{}
+	for _, s := range srcs {
+		k := dupKey{s.target.Display, s.ref}
+		if seen[k] {
+			if s.ref != "" {
+				return fmt.Sprintf("%s @ %s given twice", s.target.Display, s.ref)
+			}
+			return fmt.Sprintf("%s given twice", s.target.Display)
+		}
+		seen[k] = true
+	}
+	return ""
+}
+
+type dupKey struct{ display, ref string }
 
 func failure(stderr io.Writer, err error) int {
 	if errors.Is(err, context.Canceled) {

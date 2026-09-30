@@ -5,16 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"skill-atlas/internal/scan"
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
+  skill-atlas scan [--html] [--ref <branch|tag>] [--exclude <pattern>]... <git-url>[#<ref>]...
 
 Flags:
   --html               open the results as an HTML file in the web browser instead of the TUI
-  --ref <branch|tag>   branch or tag to scan (default: remote's default branch)
+  --ref <branch|tag>   branch or tag for URLs without #<ref> (default: remote's default branch)
   --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
   -h, --help           show this help
 `
@@ -29,10 +30,15 @@ const (
 // command is the result of parsing the command line.
 type command struct {
 	action  action
-	url     string
-	ref     string
+	repos   []repoArg // in command-line order
 	html    bool
 	exclude []string // --exclude patterns, in order
+}
+
+// repoArg is one <git-url>[#<ref>] argument; ref is empty for the remote's default branch.
+type repoArg struct {
+	url string
+	ref string
 }
 
 // usageError is a bad command line; msg may be empty when only usage is shown.
@@ -62,7 +68,7 @@ func parseScan(args []string) (command, error) {
 	var exclude stringList
 	fs.Var(&exclude, "exclude", "")
 
-	var urls []string
+	var rawURLs []string
 	for {
 		if err := fs.Parse(args); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
@@ -73,7 +79,7 @@ func parseScan(args []string) (command, error) {
 		if fs.NArg() == 0 {
 			break
 		}
-		urls = append(urls, fs.Arg(0))
+		rawURLs = append(rawURLs, fs.Arg(0))
 		args = fs.Args()[1:]
 	}
 
@@ -87,11 +93,19 @@ func parseScan(args []string) (command, error) {
 			return command{}, &usageError{msg: fmt.Sprintf("--exclude %q: %v", p, err)}
 		}
 	}
-	switch {
-	case len(urls) == 0:
+	if len(rawURLs) == 0 {
 		return command{}, &usageError{msg: "scan needs a git url"}
-	case len(urls) > 1:
-		return command{}, &usageError{msg: "scan takes exactly one git url"}
 	}
-	return command{action: actionScan, url: urls[0], ref: *ref, html: *html, exclude: exclude}, nil
+	repos := make([]repoArg, len(rawURLs))
+	for i, a := range rawURLs {
+		r := repoArg{url: a, ref: *ref}
+		if u, refPart, ok := strings.Cut(a, "#"); ok {
+			if refPart == "" {
+				return command{}, &usageError{msg: fmt.Sprintf("%q: missing branch or tag after #", a)}
+			}
+			r = repoArg{url: u, ref: refPart}
+		}
+		repos[i] = r
+	}
+	return command{action: actionScan, repos: repos, html: *html, exclude: exclude}, nil
 }
