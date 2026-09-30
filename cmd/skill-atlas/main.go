@@ -85,7 +85,7 @@ func runScan(cmd command, stderr io.Writer) int {
 	os.RemoveAll(dir)
 	stop()
 	if cmd.html {
-		if err := showHTML(target, checkout, res.Skills, htmlreport.OpenBrowser, stderr); err != nil {
+		if err := showHTML(target, checkout, res, htmlreport.OpenBrowser, stderr); err != nil {
 			return failure(stderr, err)
 		}
 		return exitOK

@@ -6,16 +6,17 @@ import (
 
 	"skill-atlas/internal/htmlreport"
 	"skill-atlas/internal/repo"
-	"skill-atlas/internal/skill"
+	"skill-atlas/internal/scan"
 )
 
 // showHTML writes the report to a temp file and opens it with open. A failed open only warns.
-func showHTML(target repo.Target, checkout repo.Checkout, skills []skill.Skill, open func(url string) error, stderr io.Writer) error {
+func showHTML(target repo.Target, checkout repo.Checkout, res scan.Result, open func(url string) error, stderr io.Writer) error {
 	page, err := htmlreport.Render(htmlreport.Report{
-		Repo:   target.Display,
-		Ref:    checkout.Ref,
-		SHA:    checkout.SHA,
-		Skills: skills,
+		Repo:     target.Display,
+		Ref:      checkout.Ref,
+		SHA:      checkout.SHA,
+		Skills:   res.Skills,
+		Excluded: res.Excluded,
 	})
 	if err != nil {
 		return err

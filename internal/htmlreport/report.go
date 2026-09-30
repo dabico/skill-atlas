@@ -3,9 +3,12 @@ package htmlreport
 
 import (
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"html/template"
+	"strings"
 
 	"skill-atlas/internal/skill"
 )
@@ -16,17 +19,31 @@ type Report struct {
 	Ref    string // branch or tag name
 	SHA    string // full commit SHA
 	Skills []skill.Skill
+	// Excluded counts SKILL.md files the scan skipped.
+	Excluded int
 }
 
 //go:embed page.tmpl
 var pageSource string
 
-var pageTmpl = template.Must(template.New("page").Parse(pageSource))
+//go:embed filter.js
+var filterScript string
+
+// scriptHash is the CSP source that allows the filter script and nothing else.
+var scriptHash = func() string {
+	sum := sha256.Sum256([]byte(filterScript))
+	return "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+}()
+
+// The hash is base64 in quotes; it goes in before parsing so attribute escaping leaves it alone.
+var pageTmpl = template.Must(template.New("page").Parse(strings.ReplaceAll(pageSource, "@SCRIPTHASH@", scriptHash)))
 
 type pageData struct {
 	Repo, Ref, SHA, ShortSHA string
-	Summary                  string // "N skills, M invalid"
+	Summary                  string // "N skills, M invalid[, K excluded]"
+	Empty                    string // text for a scan with no skills
 	Skills                   []skillData
+	Script                   template.JS // the filter script, shown only when there are skills
 }
 
 type skillData struct {
@@ -34,6 +51,7 @@ type skillData struct {
 	Name        string
 	Path        string
 	Description string
+	Match       string // name, description and path, searched by the filter
 	Invalid     bool
 	Errors      []string
 	Fields      []field
@@ -69,6 +87,7 @@ func Render(r Report) ([]byte, error) {
 			Name:        s.DisplayName(),
 			Path:        s.Path,
 			Description: s.Description,
+			Match:       strings.Join([]string{s.DisplayName(), s.Description, s.Path}, "\n"),
 			Invalid:     !s.Valid(),
 			Errors:      s.Errors,
 			Fields:      fields(s),
@@ -80,6 +99,14 @@ func Render(r Report) ([]byte, error) {
 		noun = "skill"
 	}
 	data.Summary = fmt.Sprintf("%d %s, %d invalid", len(r.Skills), noun, invalid)
+	data.Empty = "No skills found"
+	if r.Excluded > 0 {
+		data.Summary += fmt.Sprintf(", %d excluded", r.Excluded)
+		data.Empty += fmt.Sprintf(" (%d excluded)", r.Excluded)
+	}
+	if len(r.Skills) > 0 {
+		data.Script = template.JS(filterScript)
+	}
 
 	var buf bytes.Buffer
 	if err := pageTmpl.Execute(&buf, data); err != nil {

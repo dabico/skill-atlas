@@ -14,7 +14,7 @@ func bodyHTML(t *testing.T, md string) (out string, hrefs []string) {
 		t.Fatal(err)
 	}
 	doc := parse(t, []byte("<!doctype html><title>t</title><body>"+string(h)))
-	assertInert(t, doc, 0)
+	assertInert(t, doc, 0, 0)
 	for _, a := range elements(doc, "a") {
 		hrefs = append(hrefs, attr(a, "href"))
 	}

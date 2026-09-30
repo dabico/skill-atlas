@@ -4,6 +4,8 @@ package e2e
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -119,7 +121,6 @@ func TestHTMLReport(t *testing.T) {
 	want := []string{
 		f.display, f.tag, f.sha[:7], fmt.Sprintf(`title="%s"`, f.sha),
 		fmt.Sprintf("%d skills, %d invalid", len(skills), invalid),
-		`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`,
 		`<link rel="icon" href="data:,">`,
 	}
 	for _, g := range skills {
@@ -133,9 +134,76 @@ func TestHTMLReport(t *testing.T) {
 	if n := strings.Count(html, "<section "); n != len(skills) {
 		t.Errorf("report has %d skill sections, want %d", n, len(skills))
 	}
-	if strings.Contains(strings.ToLower(html), "<script") {
-		t.Error("report has a script element")
+	checkScriptPinned(t, html)
+	assertOnlyReport(t, r.tmpDir, path)
+}
+
+var scriptRE = regexp.MustCompile(`(?s)<script>(.*?)</script>`)
+
+// checkScriptPinned asserts the page has 1 script and its CSP pins that script by hash.
+func checkScriptPinned(t *testing.T, page string) {
+	t.Helper()
+	if n := strings.Count(strings.ToLower(page), "<script"); n != 1 {
+		t.Fatalf("report has %d script elements, want 1", n)
 	}
+	m := scriptRE.FindStringSubmatch(page)
+	if m == nil {
+		t.Fatal("report has no plain <script> element")
+	}
+	sum := sha256.Sum256([]byte(m[1]))
+	csp := fmt.Sprintf(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-%s'; style-src 'unsafe-inline'; img-src data:">`,
+		base64.StdEncoding.EncodeToString(sum[:]))
+	if !strings.Contains(page, csp) {
+		t.Errorf("report lacks the CSP %s", csp)
+	}
+}
+
+// TestHTMLExclude runs --html with --exclude; the page counts the excluded skill like the TUI header.
+func TestHTMLExclude(t *testing.T) {
+	t.Parallel()
+	f := ideavim
+	const excluded = ".claude/skills/changelog/SKILL.md"
+	invalid := 0
+	var kept []goldenSkill
+	for _, g := range readGolden(t, f.golden) {
+		if g.Path == excluded {
+			continue
+		}
+		kept = append(kept, g)
+		if !g.Valid {
+			invalid++
+		}
+	}
+	if len(kept) != 5 {
+		t.Fatalf("golden leaves %d skills, want 5", len(kept))
+	}
+
+	r := runHTML(t, requireTool(t, "true"), nil, "--ref", f.tag, "--exclude", ".claude/skills/changelog/", f.url)
+	if r.code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
+	}
+	path := r.reportPath(t)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(b)
+
+	if want := fmt.Sprintf(">5 skills, %d invalid, 1 excluded<", invalid); !strings.Contains(page, want) {
+		t.Errorf("report lacks %q", want)
+	}
+	if n := strings.Count(page, "<section "); n != 5 {
+		t.Errorf("report has %d skill sections, want 5", n)
+	}
+	if strings.Contains(page, excluded) {
+		t.Errorf("report lists the excluded skill %s", excluded)
+	}
+	for _, g := range kept {
+		if !strings.Contains(page, g.Path) {
+			t.Errorf("report lacks %s", g.Path)
+		}
+	}
+	checkScriptPinned(t, page)
 	assertOnlyReport(t, r.tmpDir, path)
 }
 

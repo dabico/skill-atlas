@@ -122,7 +122,7 @@ Pass the flag more than once to add patterns. Both `--exclude <pattern>` and `--
 
 Excluded files are counted and never parsed.
 Symlinks and `.git/` stay ignored and aren't counted.
-The TUI shows the count (see [TUI](#tui)).
+The TUI and the HTML report show the count (see [TUI](#tui) and [HTML report](#html-report)).
 
 Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' <git-url>`.
 
@@ -162,20 +162,35 @@ Split view: skill list on the left, details of the selected skill on the right.
 ## HTML report
 
 `skill-atlas scan --html <git-url>` writes the results to an HTML file and opens it in the browser instead of showing the TUI.
-It needs no terminal. The page is static and has no interactive parts.
+It needs no terminal. It combines with `--exclude`: the page lists the skills that remain and counts the excluded files.
 
 The page has the same information as the TUI:
 
-- Header: repository URL, ref, short commit SHA, skill count, invalid count. The full commit SHA shows as hover text on the short one.
+- Header: repository URL, ref, short commit SHA, skill count, invalid count. The full commit SHA shows as hover text on the short one. When `--exclude` skipped files, the counts end with `, K excluded`: `5 skills, 1 invalid, 1 excluded`. Without exclusions the page omits it.
 - Contents: a list that links to each skill. Invalid skills have an `invalid` badge.
 - Skill sections: `name`, path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields, and validation errors for invalid skills. Below that, the full Markdown body, rendered.
-- A scan with no skills shows `No skills found`.
+- A scan with no skills shows `No skills found`. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
 - The list shows the directory name when a skill has no usable `name`.
+- A filter box narrows the page to matching skills. See [Filter](#filter).
+
+### Filter
+
+The box matches the TUI <kbd>/</kbd> filter.
+
+- It keeps the skills whose name (or directory name), description or path contains the typed text. The match ignores case.
+- The contents list and the skill sections both narrow.
+- While the box has text, a line shows `Skills N/M`, with N matching and M total. At 0 matches the page shows `No matching skills`.
+- <kbd>/</kbd> focuses the box unless focus is already in a text field. <kbd>Esc</kbd> clears the box and restores every skill.
+- The filter is for reading. It doesn't change the report file or the order of skills.
+- Without JavaScript the box is hidden and the page shows every skill.
+
+A text box can't be filtered with CSS alone. CSS selectors see the `value` attribute, which doesn't change while the user types, and `:placeholder-shown` only tells empty from non-empty. A script is the smallest way to read the typed text.
 
 ### Page
 
-- The page is 1 HTML document with inline CSS. It has no JavaScript and makes no external requests: no remote fonts, scripts, styles or images.
-- A Content Security Policy enforces this: `default-src 'none'; style-src 'unsafe-inline'; img-src data:`.
+- The page is 1 HTML document with inline CSS. It makes no external requests: no remote fonts, scripts, styles or images.
+- The page has 1 inline script, which runs the [filter](#filter). It reads the typed text and the `data-match` attribute of each skill, toggles the `hidden` attribute and sets text with `textContent`. It makes no network calls and uses no `eval` or `innerHTML`. It never writes skill content into the page. A page with no skills has no script.
+- A Content Security Policy enforces this. With skills: `default-src 'none'; script-src 'sha256-<hash>'; style-src 'unsafe-inline'; img-src data:`. The tool computes the hash from the exact script text. The policy has no `'unsafe-inline'` for scripts, so the browser blocks any other script. Without skills the policy has no `script-src`.
 - Colors follow the browser's light or dark setting. The layout fits a phone screen.
 - The Markdown body uses GitHub Flavored Markdown. Headings in the body sit 2 levels below the skill `name`.
 - Raw HTML in a body is dropped.

@@ -2,6 +2,8 @@ package htmlreport
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"net/url"
 	"slices"
 	"strings"
@@ -12,7 +14,17 @@ import (
 	"skill-atlas/internal/skill"
 )
 
-const cspMeta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">`
+// Page CSP without a script, and the same policy plus the filter script's hash.
+const (
+	cspNoScript = `default-src 'none'; style-src 'unsafe-inline'; img-src data:`
+	cspMeta     = `<meta http-equiv="Content-Security-Policy" content="` + cspNoScript + `">`
+)
+
+// cspWithScript is the policy for a page with skills; the hash is computed here from script.
+func cspWithScript(script string) string {
+	sum := sha256.Sum256([]byte(script))
+	return `default-src 'none'; script-src 'sha256-` + base64.StdEncoding.EncodeToString(sum[:]) + `'; style-src 'unsafe-inline'; img-src data:`
+}
 
 // hostile breaks out of text, quoted attributes and markup if it isn't escaped.
 const hostile = `<script>alert(1)</script>"'><img src=x onerror=alert(2)>&amp;`
@@ -78,9 +90,9 @@ func render(t *testing.T, r Report) ([]byte, *html.Node) {
 }
 
 // assertInert fails when doc has anything that can run code or load a resource.
-func assertInert(t *testing.T, doc *html.Node, wantStyles int) {
+func assertInert(t *testing.T, doc *html.Node, wantStyles, wantScripts int) {
 	t.Helper()
-	styles := 0
+	styles, scripts := 0, 0
 	walk(doc, func(n *html.Node) {
 		if n.Type != html.ElementNode {
 			return
@@ -91,6 +103,11 @@ func assertInert(t *testing.T, doc *html.Node, wantStyles int) {
 			"blockquote", "hr", "br", "table", "thead", "tbody", "tr", "th", "td", "input":
 		case "style":
 			styles++
+		case "script":
+			scripts++
+			if len(n.Attr) != 0 {
+				t.Errorf("script has attributes %v, want none", n.Attr)
+			}
 		case "meta":
 			if attr(n, "http-equiv") == "" && attr(n, "name") == "" && attr(n, "charset") == "" {
 				t.Errorf("unexpected meta %v", n.Attr)
@@ -122,6 +139,9 @@ func assertInert(t *testing.T, doc *html.Node, wantStyles int) {
 	if styles != wantStyles {
 		t.Errorf("got %d <style> elements, want %d", styles, wantStyles)
 	}
+	if scripts != wantScripts {
+		t.Errorf("got %d <script> elements, want %d", scripts, wantScripts)
+	}
 }
 
 func TestRenderHostile(t *testing.T) {
@@ -149,12 +169,15 @@ func TestRenderHostile(t *testing.T) {
 	}
 	page, doc := render(t, Report{Repo: hostile, Ref: hostile, SHA: hostile + "0123456789", Skills: []skill.Skill{s}})
 
-	assertInert(t, doc, 1)
+	assertInert(t, doc, 1, 1)
 	lower := strings.ToLower(string(page))
-	for _, bad := range []string{"<script", "javascript:", "<iframe", "<img", "<div onclick", "<b onmouseover"} {
+	for _, bad := range []string{"javascript:", "<iframe", "<img", "<div onclick", "<b onmouseover"} {
 		if strings.Contains(lower, bad) {
 			t.Errorf("output contains live markup %q", bad)
 		}
+	}
+	if n := strings.Count(lower, "<script"); n != 1 {
+		t.Errorf("output has %d script tags, want only the filter script", n)
 	}
 	if !bytes.Contains(page, []byte("&lt;script&gt;alert(1)&lt;/script&gt;")) {
 		t.Error("hostile text isn't escaped in the output")
@@ -224,9 +247,9 @@ func TestRenderStructure(t *testing.T) {
 	}
 	sha := "c1ae565cfb98be30ea75e4b351e823846c69c3c8"
 	page, doc := render(t, Report{Repo: "github.com/org/repo", Ref: "v1.2.0", SHA: sha, Skills: skills})
-	assertInert(t, doc, 1)
+	assertInert(t, doc, 1, 1)
 
-	if !bytes.Contains(page, []byte(cspMeta)) {
+	if !bytes.Contains(page, []byte(`<meta http-equiv="Content-Security-Policy" content="`+cspWithScript(filterScript)+`">`)) {
 		t.Error("CSP meta tag is missing")
 	}
 	if !bytes.Contains(page, []byte(`<link rel="icon" href="data:,">`)) {
@@ -373,11 +396,44 @@ func TestRenderCounts(t *testing.T) {
 	}
 }
 
+// TestRenderExcluded checks the excluded count reads like the TUI header and empty state.
+func TestRenderExcluded(t *testing.T) {
+	one := skill.Skill{Path: "a/SKILL.md", Dir: "a", Name: "a", Description: "d"}
+	tests := []struct {
+		name     string
+		skills   []skill.Skill
+		excluded int
+		want     string
+		notWant  string
+	}{
+		{"summary", []skill.Skill{one, one}, 3, ">2 skills, 0 invalid, 3 excluded<", ""},
+		{"singular", []skill.Skill{one}, 1, ">1 skill, 0 invalid, 1 excluded<", ""},
+		{"zero is hidden", []skill.Skill{one}, 0, ">1 skill, 0 invalid<", "excluded"},
+		{"empty state", nil, 2, ">No skills found (2 excluded)<", ""},
+		{"empty summary", nil, 2, ">0 skills, 0 invalid, 2 excluded<", ""},
+		{"empty without exclusions", nil, 0, ">No skills found<", "excluded"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			page, _ := render(t, Report{Repo: "github.com/o/r", Skills: tt.skills, Excluded: tt.excluded})
+			if !bytes.Contains(page, []byte(tt.want)) {
+				t.Errorf("page lacks %q", tt.want)
+			}
+			if tt.notWant != "" && bytes.Contains(page, []byte(tt.notWant)) {
+				t.Errorf("page contains %q", tt.notWant)
+			}
+		})
+	}
+}
+
 func TestRenderEmpty(t *testing.T) {
 	page, doc := render(t, Report{Repo: "github.com/o/r", Ref: "main", SHA: "abcdef0123"})
-	assertInert(t, doc, 1)
-	if !bytes.Contains(page, []byte("No skills found")) {
+	assertInert(t, doc, 1, 0)
+	if !bytes.Contains(page, []byte(">No skills found<")) {
 		t.Error(`page lacks "No skills found"`)
+	}
+	if len(elements(doc, "input")) != 0 {
+		t.Error("empty scan has a filter box")
 	}
 	if len(elements(doc, "nav")) != 0 || len(elements(doc, "section")) != 0 {
 		t.Error("empty scan has a contents list or sections")
@@ -399,7 +455,7 @@ func TestRenderSelfContained(t *testing.T) {
 	s := skill.Skill{Path: "a/SKILL.md", Dir: "a", Name: "a", Description: "d", Body: "[x](https://example.com) ![i](https://example.com/i.png)"}
 	page, _ := render(t, Report{Repo: "github.com/o/r", Ref: "main", SHA: "abcdef0123", Skills: []skill.Skill{s}})
 	lower := strings.ToLower(string(page))
-	for _, bad := range []string{"<script", "@import", "url(", "src=", "<img", "<iframe", "<object", "<embed"} {
+	for _, bad := range []string{"@import", "url(", "src=", "<img", "<iframe", "<object", "<embed"} {
 		if strings.Contains(lower, bad) {
 			t.Errorf("page contains %q", bad)
 		}

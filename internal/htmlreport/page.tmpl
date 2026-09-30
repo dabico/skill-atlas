@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none';{{if .Skills}} script-src @SCRIPTHASH@;{{end}} style-src 'unsafe-inline'; img-src data:">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
@@ -94,6 +94,10 @@ nav ul { margin: 0; padding-left: 1.25rem; }
 .body blockquote { margin-left: 0; padding-left: 12px; border-left: 4px solid var(--border); color: var(--muted); }
 .top { display: inline-block; margin-top: 12px; font-size: 0.875rem; }
 .empty { padding: 24px 0; color: var(--muted); }
+[hidden] { display: none; }
+.filter { margin: 0 0 12px; }
+.filter input { width: 100%; max-width: 24rem; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+.fcount { margin: 4px 0 0; color: var(--muted); font-size: 0.875rem; }
 </style>
 </head>
 <body>
@@ -106,14 +110,19 @@ nav ul { margin: 0; padding-left: 1.25rem; }
 {{- if .Skills}}
 <nav id="toc" aria-label="Skills">
 <h2>Contents</h2>
+<div class="filter" id="filter" hidden>
+<input type="search" id="q" placeholder="Filter (press /)" aria-label="Filter skills" autocomplete="off">
+<p class="fcount" id="fcount" hidden></p>
+</div>
+<p class="empty" id="nomatch" hidden>No matching skills</p>
 <ul>
 {{- range .Skills}}
-<li><a href="#{{.ID}}">{{.Name}}</a>{{if .Invalid}} <span class="badge">invalid</span>{{end}}</li>
+<li data-match="{{.Match}}"><a href="#{{.ID}}">{{.Name}}</a>{{if .Invalid}} <span class="badge">invalid</span>{{end}}</li>
 {{- end}}
 </ul>
 </nav>
 {{- range .Skills}}
-<section class="skill" id="{{.ID}}">
+<section class="skill" id="{{.ID}}" data-match="{{.Match}}">
 <h2>{{.Name}}{{if .Invalid}} <span class="badge">invalid</span>{{end}}</h2>
 <p class="path"><code>{{.Path}}</code></p>
 {{- if .Description}}
@@ -145,8 +154,11 @@ nav ul { margin: 0; padding-left: 1.25rem; }
 </section>
 {{- end}}
 {{- else}}
-<p class="empty">No skills found</p>
+<p class="empty">{{.Empty}}</p>
 {{- end}}
 </main>
+{{- if .Skills}}
+<script>{{.Script}}</script>
+{{- end}}
 </body>
 </html>

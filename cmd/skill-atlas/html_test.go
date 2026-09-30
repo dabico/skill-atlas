@@ -11,13 +11,14 @@ import (
 
 	"skill-atlas/internal/htmlreport"
 	"skill-atlas/internal/repo"
+	"skill-atlas/internal/scan"
 	"skill-atlas/internal/skill"
 )
 
 var (
 	testTarget   = repo.Target{Display: "github.com/o/r"}
 	testCheckout = repo.Checkout{Ref: "main", SHA: "0123456789abcdef"}
-	testSkills   = []skill.Skill{{Path: "a/SKILL.md", Dir: "a", Name: "a", Description: "d"}}
+	testResult   = scan.Result{Skills: []skill.Skill{{Path: "a/SKILL.md", Dir: "a", Name: "a", Description: "d"}}, Excluded: 2}
 )
 
 func useTempDir(t *testing.T) string {
@@ -33,7 +34,7 @@ func TestShowHTMLOpensFile(t *testing.T) {
 	dir := useTempDir(t)
 	var opened string
 	var errb bytes.Buffer
-	err := showHTML(testTarget, testCheckout, testSkills, func(u string) error { opened = u; return nil }, &errb)
+	err := showHTML(testTarget, testCheckout, testResult, func(u string) error { opened = u; return nil }, &errb)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +50,9 @@ func TestShowHTMLOpensFile(t *testing.T) {
 	if err != nil || !strings.Contains(string(page), "github.com/o/r") {
 		t.Errorf("report file unreadable or lacks the repo (err %v)", err)
 	}
+	if !strings.Contains(string(page), "1 skill, 0 invalid, 2 excluded") {
+		t.Error("report lacks the excluded count from the scan result")
+	}
 	u, err := url.Parse(opened)
 	if err != nil || u.Scheme != "file" || u.Path != filepath.ToSlash(path) {
 		t.Errorf("opened %q, want the file URL of %q", opened, path)
@@ -61,7 +65,7 @@ func TestShowHTMLOpensFile(t *testing.T) {
 func TestShowHTMLOpenFailureWarns(t *testing.T) {
 	useTempDir(t)
 	var errb bytes.Buffer
-	err := showHTML(testTarget, testCheckout, testSkills, func(string) error { return errors.New("boom") }, &errb)
+	err := showHTML(testTarget, testCheckout, testResult, func(string) error { return errors.New("boom") }, &errb)
 	if err != nil {
 		t.Fatalf("a failed launch returned %v, want nil", err)
 	}
@@ -84,7 +88,7 @@ func TestShowHTMLWriteFailure(t *testing.T) {
 	t.Setenv("TEMP", bad)
 	called := false
 	var errb bytes.Buffer
-	err := showHTML(testTarget, testCheckout, testSkills, func(string) error { called = true; return nil }, &errb)
+	err := showHTML(testTarget, testCheckout, testResult, func(string) error { called = true; return nil }, &errb)
 	if err == nil {
 		t.Fatal("showHTML succeeded without a writable temp dir")
 	}
