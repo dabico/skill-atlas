@@ -24,7 +24,8 @@ func doc(name string) string {
 
 func paths(t *testing.T, root string) []string {
 	t.Helper()
-	skills, err := Dir(root, "repo")
+	res, err := Dir(root, "repo", Options{})
+	skills := res.Skills
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +52,8 @@ func TestDirNestedAndSorted(t *testing.T) {
 func TestDirEmpty(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "README.md", "hi")
-	skills, err := Dir(root, "repo")
+	res, err := Dir(root, "repo", Options{})
+	skills := res.Skills
 	if err != nil || len(skills) != 0 {
 		t.Errorf("got %v, %v", skills, err)
 	}
@@ -90,7 +92,8 @@ func TestDirIgnores(t *testing.T) {
 func TestDirRootUsesRootName(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "SKILL.md", doc("repo"))
-	skills, err := Dir(root, "repo")
+	res, err := Dir(root, "repo", Options{})
+	skills := res.Skills
 	if err != nil || len(skills) != 1 {
 		t.Fatalf("got %v, %v", skills, err)
 	}
@@ -102,7 +105,8 @@ func TestDirRootUsesRootName(t *testing.T) {
 func TestDirMismatchSurfaces(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "pdf-tools/SKILL.md", doc("pdf"))
-	skills, err := Dir(root, "repo")
+	res, err := Dir(root, "repo", Options{})
+	skills := res.Skills
 	if err != nil || len(skills) != 1 {
 		t.Fatalf("got %v, %v", skills, err)
 	}
@@ -113,7 +117,7 @@ func TestDirMismatchSurfaces(t *testing.T) {
 }
 
 func TestDirMissingRoot(t *testing.T) {
-	if _, err := Dir(filepath.Join(t.TempDir(), "nope"), "repo"); err == nil {
+	if _, err := Dir(filepath.Join(t.TempDir(), "nope"), "repo", Options{}); err == nil {
 		t.Error("expected error")
 	}
 }

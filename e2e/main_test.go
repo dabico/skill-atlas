@@ -109,11 +109,13 @@ var ideavim = fixture{
 	golden: "ideavim-2.47.1.golden.json",
 }
 
-// scanned is the cached result of cloning and scanning one url+ref.
+// scanned is a cloned url+ref and the result of scanning it.
 type scanned struct {
 	target   repo.Target
 	checkout repo.Checkout
+	dir      string // the clone, kept until the scratch root is removed
 	skills   []skill.Skill
+	excluded int
 	cloneDur time.Duration
 	err      error
 }
@@ -128,8 +130,8 @@ var (
 	cacheMu sync.Mutex
 )
 
-// cloneScan clones url@ref once per process and scans it.
-func cloneScan(t testing.TB, url, ref string) scanned {
+// cloneScan clones url@ref once per process and scans the clone with opts.
+func cloneScan(t testing.TB, url, ref string, opts scan.Options) scanned {
 	t.Helper()
 	key := url + "|" + ref
 	cacheMu.Lock()
@@ -158,13 +160,18 @@ func cloneScan(t testing.TB, url, ref string) scanned {
 			return
 		}
 		e.res.checkout = co
-		e.res.skills, e.res.err = scan.Dir(dir, target.Name)
-		os.RemoveAll(dir)
+		e.res.dir = dir
 	})
 	if e.res.err != nil {
-		t.Fatalf("clone+scan %s@%q: %v", url, ref, e.res.err)
+		t.Fatalf("clone %s@%q: %v", url, ref, e.res.err)
 	}
-	return e.res
+	res := e.res
+	r, err := scan.Dir(res.dir, res.target.Name, opts)
+	if err != nil {
+		t.Fatalf("scan %s@%q: %v", url, ref, err)
+	}
+	res.skills, res.excluded = r.Skills, r.Excluded
+	return res
 }
 
 // goldenSkill is the stable per-skill view stored in golden files.

@@ -1,0 +1,333 @@
+package scan
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"slices"
+	"strings"
+	"testing"
+)
+
+// scanPaths returns the kept paths and the excluded count for root.
+func scanPaths(t *testing.T, root string, opts Options) ([]string, int) {
+	t.Helper()
+	res, err := Dir(root, "repo", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range res.Skills {
+		got = append(got, s.Path)
+	}
+	return got, res.Excluded
+}
+
+// tree writes a SKILL.md at each given directory ("" is the root) and returns the root.
+func tree(t *testing.T, dirs ...string) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, d := range dirs {
+		rel := "SKILL.md"
+		name := "repo"
+		if d != "" {
+			rel = d + "/SKILL.md"
+			name = filepath.Base(d)
+		}
+		write(t, root, rel, doc(name))
+	}
+	return root
+}
+
+func TestIsTestDir(t *testing.T) {
+	yes := []string{
+		// whole names, any letter case
+		"test", "tests", "testdata", "test-data", "test_data", "testfixtures", "__tests__", "fixtures", "__fixtures__",
+		"Test", "TESTS", "TestData", "Test-Data", "TEST_DATA", "TestFixtures", "__Tests__", "Fixtures", "__FIXTURES__",
+		// Kotlin and Gradle source sets
+		"jvmTest", "commonTest", "androidUnitTest", "integrationTest", "iosX64Test", "jvmTests", "nativeTests",
+		// separator suffixes, any letter case
+		"integration-tests", "e2e_tests", "unit-test", "api_test", "E2E-Tests", "Smoke_TEST",
+	}
+	for _, n := range yes {
+		if !isTestDir(n) {
+			t.Errorf("isTestDir(%q) = false, want true", n)
+		}
+	}
+	no := []string{
+		"", "src", "skills", "latest", "Latest", "contest", "attest", "protest", "testing", "tested", "testsuite",
+		"test1", "tests-maintenance", "test-utils", "my-tests-dir", "fixture", "data", "mocks",
+		"ATest", "ATests", "JUNITTest", // capital letter before Test: not a source set
+		"Testdata-x", "tst", "t_est", "contests", "test.d", ".test", ".tests",
+	}
+	for _, n := range no {
+		if isTestDir(n) {
+			t.Errorf("isTestDir(%q) = true, want false", n)
+		}
+	}
+}
+
+func TestDirSkipsTestDirsByDefault(t *testing.T) {
+	root := tree(t,
+		".claude/skills/real",
+		"integration-tests/src/jvmTest/resources/skills/arithmetic-evaluator",
+		"a/tests/b",
+		"a/Tests/c",
+		"x/testdata/y",
+		"x/__fixtures__/z",
+		"pkg/e2e_tests/s",
+		"src/commonTest/kotlin/s",
+		"keep/latest/s",
+	)
+	got, excluded := scanPaths(t, root, Options{})
+	want := []string{".claude/skills/real/SKILL.md", "keep/latest/s/SKILL.md"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("paths = %v, want %v", got, want)
+	}
+	if excluded != 7 {
+		t.Errorf("excluded = %d, want 7", excluded)
+	}
+}
+
+func TestDirOwnDirNotChecked(t *testing.T) {
+	root := tree(t,
+		".claude/skills/tests",
+		".claude/skills/tests-maintenance",
+		".claude/skills/jvmTest",
+		".claude/skills/fixtures",
+		"test",
+	)
+	got, excluded := scanPaths(t, root, Options{})
+	want := []string{
+		".claude/skills/fixtures/SKILL.md", ".claude/skills/jvmTest/SKILL.md",
+		".claude/skills/tests-maintenance/SKILL.md", ".claude/skills/tests/SKILL.md", "test/SKILL.md",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("paths = %v, want %v", got, want)
+	}
+	if excluded != 0 {
+		t.Errorf("excluded = %d, want 0", excluded)
+	}
+}
+
+func TestDirRootLevelSkillKept(t *testing.T) {
+	root := tree(t, "")
+	got, excluded := scanPaths(t, root, Options{})
+	if want := []string{"SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 0 {
+		t.Errorf("got %v, excluded %d", got, excluded)
+	}
+	// The repository name is never a directory of the tree, so a test-like name has no effect.
+	res, err := Dir(root, "tests", Options{})
+	if err != nil || len(res.Skills) != 1 || res.Excluded != 0 {
+		t.Errorf("got %+v, %v", res, err)
+	}
+}
+
+func TestDirNestedSkillsJudgedSeparately(t *testing.T) {
+	root := tree(t,
+		"skills/outer",
+		"skills/outer/tests/inner",
+		"skills/outer/examples/inner2",
+		"tests/top/nested",
+	)
+	got, excluded := scanPaths(t, root, Options{})
+	want := []string{"skills/outer/SKILL.md", "skills/outer/examples/inner2/SKILL.md"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("paths = %v, want %v", got, want)
+	}
+	if excluded != 2 {
+		t.Errorf("excluded = %d, want 2", excluded)
+	}
+}
+
+func TestDirIncludeTests(t *testing.T) {
+	root := tree(t, ".claude/skills/real", "src/jvmTest/skills/fixture", "tests/x/y")
+	got, excluded := scanPaths(t, root, Options{IncludeTests: true})
+	want := []string{".claude/skills/real/SKILL.md", "src/jvmTest/skills/fixture/SKILL.md", "tests/x/y/SKILL.md"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("paths = %v, want %v", got, want)
+	}
+	if excluded != 0 {
+		t.Errorf("excluded = %d, want 0", excluded)
+	}
+}
+
+func TestDirExcludePatterns(t *testing.T) {
+	dirs := []string{
+		"docs/a", "docs/deep/b", "src/docs/c", "skills/old/d", "skills/new/e", "other/skills/old/f",
+		"vendor/g", "pkg/vendor/h", "examples/i", "pkg/examples/j", "keep/k",
+	}
+	tests := []struct {
+		name     string
+		patterns []string
+		excluded []string // directories expected to be skipped
+	}{
+		{"directory with slash", []string{"docs/"}, []string{"docs/a", "docs/deep/b", "src/docs/c"}},
+		{"directory without slash", []string{"docs"}, []string{"docs/a", "docs/deep/b", "src/docs/c"}},
+		{"anchored with leading slash", []string{"/docs"}, []string{"docs/a", "docs/deep/b"}},
+		{"anchored by inner slash", []string{"skills/old"}, []string{"skills/old/d"}},
+		{"anchored nested directory", []string{"docs/deep/"}, []string{"docs/deep/b"}},
+		{"double star prefix", []string{"**/old"}, []string{"skills/old/d", "other/skills/old/f"}},
+		{"double star middle", []string{"skills/**/d"}, []string{"skills/old/d"}},
+		{"double star suffix", []string{"docs/**"}, []string{"docs/a", "docs/deep/b"}},
+		{"single star segment", []string{"skills/*/d"}, []string{"skills/old/d"}},
+		{"star name", []string{"ex*"}, []string{"examples/i", "pkg/examples/j"}},
+		{"question mark", []string{"vendo?"}, []string{"vendor/g", "pkg/vendor/h"}},
+		{"file pattern", []string{"keep/k/SKILL.md"}, []string{"keep/k"}},
+		{"directory-only pattern misses skill file", []string{"SKILL.md/"}, nil},
+		{"several patterns", []string{"docs/", "vendor", "examples"},
+			[]string{"docs/a", "docs/deep/b", "src/docs/c", "vendor/g", "pkg/vendor/h", "examples/i", "pkg/examples/j"}},
+		{"negation re-includes", []string{"docs/", "!docs/deep/"}, []string{"docs/a", "src/docs/c"}},
+		{"negation before pattern has no effect", []string{"!docs/deep/", "docs/"}, []string{"docs/a", "docs/deep/b", "src/docs/c"}},
+		{"negation alone excludes nothing", []string{"!docs/"}, nil},
+		{"negation re-includes file in excluded directory", []string{"vendor", "!vendor/g/SKILL.md"}, []string{"pkg/vendor/h"}},
+		{"no match", []string{"nothing-here"}, nil},
+		{"trailing spaces are ignored", []string{"docs/   "}, []string{"docs/a", "docs/deep/b", "src/docs/c"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := tree(t, dirs...)
+			got, excluded := scanPaths(t, root, Options{Exclude: tt.patterns})
+
+			gone := map[string]bool{}
+			for _, d := range tt.excluded {
+				gone[d+"/SKILL.md"] = true
+			}
+			var want []string
+			for _, d := range dirs {
+				if !gone[d+"/SKILL.md"] {
+					want = append(want, d+"/SKILL.md")
+				}
+			}
+			slices.Sort(want)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("paths = %v\nwant    %v", got, want)
+			}
+			if excluded != len(tt.excluded) {
+				t.Errorf("excluded = %d, want %d", excluded, len(tt.excluded))
+			}
+		})
+	}
+}
+
+func TestDirExcludeMatchesOwnDirAndRoot(t *testing.T) {
+	root := tree(t, "", "tests-maintenance", "sub/tests-maintenance")
+	got, excluded := scanPaths(t, root, Options{Exclude: []string{"tests-maintenance"}})
+	if want := []string{"SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 2 {
+		t.Errorf("got %v, excluded %d", got, excluded)
+	}
+	got, excluded = scanPaths(t, root, Options{Exclude: []string{"/SKILL.md"}})
+	if want := []string{"sub/tests-maintenance/SKILL.md", "tests-maintenance/SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 1 {
+		t.Errorf("got %v, excluded %d", got, excluded)
+	}
+}
+
+func TestDirExcludeWithTestRule(t *testing.T) {
+	root := tree(t, "docs/a", "tests/b/c", "keep/d")
+
+	got, excluded := scanPaths(t, root, Options{Exclude: []string{"docs"}})
+	if want := []string{"keep/d/SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 2 {
+		t.Errorf("default rule plus pattern: got %v, excluded %d", got, excluded)
+	}
+
+	// --include-tests turns off only the test rule; patterns still apply.
+	got, excluded = scanPaths(t, root, Options{IncludeTests: true, Exclude: []string{"docs"}})
+	if want := []string{"keep/d/SKILL.md", "tests/b/c/SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 1 {
+		t.Errorf("include-tests plus pattern: got %v, excluded %d", got, excluded)
+	}
+
+	// A negation undoes patterns only; the test rule is switched off with IncludeTests.
+	got, excluded = scanPaths(t, root, Options{Exclude: []string{"docs", "!tests/"}})
+	if want := []string{"keep/d/SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 2 {
+		t.Errorf("negation vs test rule: got %v, excluded %d", got, excluded)
+	}
+}
+
+func TestDirExcludedNotParsed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes unsupported")
+	}
+	root := tree(t, "keep/a")
+	write(t, root, "tests/b/SKILL.md", doc("b"))
+	p := filepath.Join(root, "tests", "b", "SKILL.md")
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(p, 0o644) })
+	if _, err := os.ReadFile(p); err == nil {
+		t.Skip("file is readable despite mode 0 (running as root?)")
+	}
+
+	got, excluded := scanPaths(t, root, Options{})
+	if want := []string{"keep/a/SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 1 {
+		t.Errorf("got %v, excluded %d", got, excluded)
+	}
+	if _, err := Dir(root, "repo", Options{IncludeTests: true}); err == nil {
+		t.Error("the unreadable file should be read once it isn't excluded")
+	}
+}
+
+func TestDirSymlinksAndGitNotCounted(t *testing.T) {
+	root := tree(t, "keep/a")
+	write(t, root, "tests/real/SKILL.md", doc("real"))
+	write(t, root, ".git/tests/SKILL.md", doc("hooks"))
+	if err := os.Symlink(filepath.Join(root, "tests", "real", "SKILL.md"), filepath.Join(root, "tests", "link.md")); err != nil {
+		t.Skip("symlinks unavailable:", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "tests", "linked"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "tests", "real", "SKILL.md"), filepath.Join(root, "tests", "linked", "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+	got, excluded := scanPaths(t, root, Options{})
+	if want := []string{"keep/a/SKILL.md"}; !reflect.DeepEqual(got, want) || excluded != 1 {
+		t.Errorf("got %v, excluded %d (want only tests/real counted)", got, excluded)
+	}
+}
+
+func TestDirResultOnlyExcluded(t *testing.T) {
+	root := tree(t, "tests/a", "tests/b")
+	res, err := Dir(root, "repo", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Skills != nil || res.Excluded != 2 {
+		t.Errorf("got %+v, want nil skills and 2 excluded", res)
+	}
+}
+
+func TestDirRejectsBadPatterns(t *testing.T) {
+	root := tree(t, "a")
+	for _, p := range []string{"", "  ", "!", "/", "[", "a[", "a**b", "**x/y"} {
+		if _, err := Dir(root, "repo", Options{Exclude: []string{"ok", p}}); err == nil {
+			t.Errorf("pattern %q: expected error", p)
+		}
+	}
+}
+
+func TestCheckPattern(t *testing.T) {
+	good := []string{"docs", "docs/", "/docs", "!docs/deep", "**/x", "a/**/b", "a/**", "*.md", "a?b", "[ab]c", `\!x`, "a b"}
+	for _, p := range good {
+		if err := CheckPattern(p); err != nil {
+			t.Errorf("CheckPattern(%q) = %v", p, err)
+		}
+	}
+	bad := map[string]string{
+		"":      "empty",
+		" \t":   "empty",
+		"!":     "empty",
+		"//":    "empty",
+		"[":     "malformed",
+		"a[b":   "malformed",
+		"x**":   "whole path segment",
+		"a/b**": "whole path segment",
+	}
+	for p, want := range bad {
+		err := CheckPattern(p)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("CheckPattern(%q) = %v, want error containing %q", p, err, want)
+		}
+	}
+}

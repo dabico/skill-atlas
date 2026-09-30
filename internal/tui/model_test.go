@@ -101,6 +101,58 @@ func TestHeader(t *testing.T) {
 	}
 }
 
+func newExcluded(skills []skill.Skill, excluded, w, h int) *model {
+	m := newModel(Report{Repo: "github.com/org/repo", Ref: "main", SHA: "a1b2c3d4e5f6", Skills: skills, Excluded: excluded})
+	m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	return m
+}
+
+func TestHeaderExcluded(t *testing.T) {
+	first := func(m *model) string { return strings.TrimRight(strings.Split(view(m), "\n")[0], " ") }
+
+	m := newExcluded(testSkills()[:2], 2, 100, 30)
+	if f := first(m); !strings.HasSuffix(f, "2 skills, 0 invalid, 2 excluded") {
+		t.Errorf("header missing excluded count: %q", f)
+	}
+	if w := ansi.StringWidth(strings.Split(view(m), "\n")[0]); w != 100 {
+		t.Errorf("header width = %d, want 100", w)
+	}
+
+	if f := first(newExcluded(testSkills(), 1, 100, 30)); !strings.HasSuffix(f, "4 skills, 1 invalid, 1 excluded") {
+		t.Errorf("header with invalid and excluded: %q", f)
+	}
+	if f := first(newExcluded(testSkills()[:1], 3, 100, 30)); !strings.HasSuffix(f, "1 skill, 0 invalid, 3 excluded") {
+		t.Errorf("singular with excluded: %q", f)
+	}
+
+	// With nothing excluded the header is unchanged.
+	if f := first(newExcluded(testSkills(), 0, 100, 30)); !strings.HasSuffix(f, "4 skills, 1 invalid") {
+		t.Errorf("header changed without exclusions: %q", f)
+	}
+}
+
+func TestEmptyReportExcluded(t *testing.T) {
+	m := newExcluded(nil, 2, 100, 30)
+	v := view(m)
+	if !strings.Contains(v, "No skills found (2 excluded)") {
+		t.Errorf("missing empty message with count:\n%s", v)
+	}
+	if !strings.Contains(v, "0 skills, 0 invalid, 2 excluded") {
+		t.Errorf("missing counts:\n%s", v)
+	}
+	if v := view(newExcluded(nil, 0, 100, 30)); strings.Contains(v, "excluded") {
+		t.Errorf("empty message mentions exclusions when there are none:\n%s", v)
+	}
+
+	// A filter with no hits keeps its own message.
+	m = newExcluded(testSkills(), 2, 100, 30)
+	press(m, "/")
+	typeText(m, "zzz")
+	if v := view(m); !strings.Contains(v, "No matches") || strings.Contains(v, "No skills found") {
+		t.Errorf("filter message wrong:\n%s", v)
+	}
+}
+
 func TestLayoutSize(t *testing.T) {
 	m := newTest(testSkills(), 100, 30)
 	lines := strings.Split(view(m), "\n")

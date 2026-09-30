@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -34,6 +35,32 @@ func TestParseArgs(t *testing.T) {
 		{name: "empty ref", args: []string{"scan", "--ref", "", u}, wantErr: "--ref", usage: true},
 		{name: "empty ref equals", args: []string{"scan", u, "--ref="}, wantErr: "--ref", usage: true},
 		{name: "unknown flag", args: []string{"scan", "--nope", u}, wantErr: "nope", usage: true},
+
+		{name: "exclude", args: []string{"scan", "--exclude", "docs/", u},
+			want: command{action: actionScan, url: u, exclude: []string{"docs/"}}},
+		{name: "exclude equals", args: []string{"scan", "--exclude=docs/", u},
+			want: command{action: actionScan, url: u, exclude: []string{"docs/"}}},
+		{name: "exclude after url", args: []string{"scan", u, "--exclude", "a"},
+			want: command{action: actionScan, url: u, exclude: []string{"a"}}},
+		{name: "exclude repeated keeps order", args: []string{"scan", "--exclude", "a", u, "--exclude=b", "--exclude", "!c"},
+			want: command{action: actionScan, url: u, exclude: []string{"a", "b", "!c"}}},
+		{name: "exclude glob", args: []string{"scan", "--exclude", "**/fixtures/*", u},
+			want: command{action: actionScan, url: u, exclude: []string{"**/fixtures/*"}}},
+		{name: "include tests", args: []string{"scan", "--include-tests", u},
+			want: command{action: actionScan, url: u, includeTests: true}},
+		{name: "include tests after url", args: []string{"scan", u, "--include-tests"},
+			want: command{action: actionScan, url: u, includeTests: true}},
+		{name: "include tests false", args: []string{"scan", "--include-tests=false", u},
+			want: command{action: actionScan, url: u}},
+		{name: "all flags", args: []string{"scan", "--ref=v1", "--include-tests", "--exclude", "x", u},
+			want: command{action: actionScan, url: u, ref: "v1", includeTests: true, exclude: []string{"x"}}},
+		{name: "empty exclude", args: []string{"scan", "--exclude", "", u}, wantErr: "--exclude", usage: true},
+		{name: "empty exclude equals", args: []string{"scan", u, "--exclude="}, wantErr: "--exclude", usage: true},
+		{name: "blank exclude", args: []string{"scan", "--exclude", "  ", u}, wantErr: "pattern is empty", usage: true},
+		{name: "empty exclude among valid", args: []string{"scan", "--exclude", "a", "--exclude=", u}, wantErr: "--exclude", usage: true},
+		{name: "exclude needs value", args: []string{"scan", u, "--exclude"}, wantErr: "exclude", usage: true},
+		{name: "bad glob", args: []string{"scan", "--exclude", "[", u}, wantErr: "malformed", usage: true},
+		{name: "partial doublestar", args: []string{"scan", "--exclude", "a**b", u}, wantErr: "whole path segment", usage: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -51,7 +78,7 @@ func TestParseArgs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("got %+v, want %+v", got, tt.want)
 			}
 		})
@@ -67,12 +94,16 @@ func TestRunExitCodes(t *testing.T) {
 		wantErrHas string
 	}{
 		{name: "no args", code: exitUsage, wantErrHas: "Usage:"},
-		{name: "help", args: []string{"help"}, code: exitOK, wantOut: "skill-atlas scan [--ref <branch|tag>] <git-url>"},
+		{name: "help", args: []string{"help"}, code: exitOK, wantOut: "skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... [--include-tests] <git-url>"},
 		{name: "scan -h", args: []string{"scan", "-h"}, code: exitOK, wantOut: "--ref"},
+		{name: "help lists exclude", args: []string{"help"}, code: exitOK, wantOut: "--exclude <pattern>"},
+		{name: "help lists include-tests", args: []string{"help"}, code: exitOK, wantOut: "--include-tests"},
 		{name: "unknown", args: []string{"x"}, code: exitUsage, wantErrHas: `skill-atlas: unknown command "x"`},
 		{name: "no url", args: []string{"scan"}, code: exitUsage, wantErrHas: "Usage:"},
 		{name: "two urls", args: []string{"scan", "a", "b"}, code: exitUsage, wantErrHas: "Usage:"},
 		{name: "empty ref", args: []string{"scan", "--ref=", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "--ref"},
+		{name: "empty exclude", args: []string{"scan", "--exclude=", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "--exclude"},
+		{name: "bad exclude glob", args: []string{"scan", "--exclude", "[", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "malformed"},
 		{name: "bad url", args: []string{"scan", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
 		{name: "local path", args: []string{"scan", "/tmp/some/repo"}, code: exitFail, wantErrHas: "skill-atlas: "},
 	}
