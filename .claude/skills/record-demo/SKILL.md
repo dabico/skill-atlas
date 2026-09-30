@@ -110,4 +110,10 @@ Use `color_scheme="dark"` on the context for dark mode and `full_page=True` on `
 
 ## After recording
 
-`docs/demo/` stays untracked. Tell the user the file paths and sizes, and let them decide what to commit or where to upload. `gh` can't attach images to a PR description. The user drags them into the GitHub editor, or commits them and links the raw URL.
+`docs/demo/` stays untracked. To put media in a PR, reference the local paths in the body and pass each file to `--attach` (gh 2.101.0 or later, push access needed). gh uploads them and rewrites the references:
+
+```shell
+gh pr edit <n> --body-file body.md --attach docs/demo/tui-multi.mp4 --attach docs/demo/tui-multi-list.png
+```
+
+Put a video's `![](docs/demo/x.mp4)` alone in its paragraph so it renders as a player. `gh pr create` and `gh pr comment` take `--attach` too.
