@@ -91,7 +91,7 @@ func runScan(d deps, cmd command, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	results, err := scanAll(ctx, srcs, dir, scan.Options{Exclude: cmd.exclude}, d.clone, d.scanDir, stderr)
+	results, err := scanAll(ctx, srcs, dir, cmd.parallel, scan.Options{Exclude: cmd.exclude}, d.clone, d.scanDir, stderr)
 	if err != nil {
 		return failure(stderr, err)
 	}

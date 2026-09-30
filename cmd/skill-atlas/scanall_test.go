@@ -37,7 +37,7 @@ func TestScanAllKeepsOrder(t *testing.T) {
 		time.Sleep(time.Duration(6-n) * 10 * time.Millisecond)
 		return repo.Checkout{SHA: tg.Name}, nil
 	}
-	got, err := scanAll(context.Background(), srcs, t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{})
+	got, err := scanAll(context.Background(), srcs, t.TempDir(), defaultParallel, scan.Options{}, clone, okScan, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,27 +48,57 @@ func TestScanAllKeepsOrder(t *testing.T) {
 	}
 }
 
-func TestScanAllLimitsConcurrencyAndSeparatesDirs(t *testing.T) {
+// The limit follows the parallel argument. The first N clones wait for each other, so all N are in flight at once
+// (a lower limit would never open the gate), and the peak shows whether more than N ever ran.
+func TestScanAllLimitsConcurrency(t *testing.T) {
+	for _, limit := range []int{1, 2, 4, 7} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			var cur, peak atomic.Int32
+			gate := make(chan struct{})
+			var open sync.Once
+			clone := func(_ context.Context, _ repo.Target, _, _ string) (repo.Checkout, error) {
+				n := cur.Add(1)
+				for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+				}
+				if int(n) == limit {
+					open.Do(func() { close(gate) })
+				}
+				select {
+				case <-gate:
+				case <-time.After(30 * time.Second): // only reached when the limit is too low
+					return repo.Checkout{}, errors.New("gate never opened")
+				}
+				cur.Add(-1)
+				return repo.Checkout{}, nil
+			}
+			got, err := scanAll(context.Background(), sources(limit*2+1), t.TempDir(), limit, scan.Options{}, clone, okScan, &bytes.Buffer{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, g := range got {
+				if g.err != nil {
+					t.Fatalf("%s: %v", g.target.Name, g.err)
+				}
+			}
+			if p := int(peak.Load()); p != limit {
+				t.Errorf("peak concurrency %d, want %d", p, limit)
+			}
+		})
+	}
+}
+
+func TestScanAllSeparatesDirs(t *testing.T) {
 	root := t.TempDir()
-	var cur, peak atomic.Int32
 	var mu sync.Mutex
 	dirs := map[string]bool{}
 	clone := func(_ context.Context, _ repo.Target, _, dir string) (repo.Checkout, error) {
-		n := cur.Add(1)
-		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
-		}
-		time.Sleep(20 * time.Millisecond)
-		cur.Add(-1)
 		mu.Lock()
 		dirs[dir] = true
 		mu.Unlock()
 		return repo.Checkout{}, nil
 	}
-	if _, err := scanAll(context.Background(), sources(10), root, scan.Options{}, clone, okScan, &bytes.Buffer{}); err != nil {
+	if _, err := scanAll(context.Background(), sources(10), root, defaultParallel, scan.Options{}, clone, okScan, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
-	}
-	if p := peak.Load(); p != maxClones {
-		t.Errorf("peak concurrency %d, want %d", p, maxClones)
 	}
 	if len(dirs) != 10 {
 		t.Errorf("%d distinct dirs, want 10", len(dirs))
@@ -94,7 +124,7 @@ func TestScanAllProgressAndOptions(t *testing.T) {
 	}
 	clone := func(context.Context, repo.Target, string, string) (repo.Checkout, error) { return repo.Checkout{}, nil }
 	opts := scan.Options{Exclude: []string{"docs/"}}
-	if _, err := scanAll(context.Background(), srcs, t.TempDir(), opts, clone, scanDir, &progress); err != nil {
+	if _, err := scanAll(context.Background(), srcs, t.TempDir(), defaultParallel, opts, clone, scanDir, &progress); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"Cloning h/o/r0…\n", "Cloning h/o/r1 @ v1…\n"} {
@@ -123,7 +153,7 @@ func TestScanAllPartialResults(t *testing.T) {
 		}
 		return repo.Checkout{SHA: tg.Name}, nil
 	}
-	got, err := scanAll(context.Background(), srcs, t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{})
+	got, err := scanAll(context.Background(), srcs, t.TempDir(), defaultParallel, scan.Options{}, clone, okScan, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("err = %v, want nil: a repository failure isn't a scan failure", err)
 	}
@@ -149,7 +179,7 @@ func TestScanAllQueuedReposStillRunAfterFailure(t *testing.T) {
 		}
 		return repo.Checkout{}, nil
 	}
-	got, err := scanAll(context.Background(), sources(12), t.TempDir(), scan.Options{}, clone, okScan, &bytes.Buffer{})
+	got, err := scanAll(context.Background(), sources(12), t.TempDir(), defaultParallel, scan.Options{}, clone, okScan, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +211,7 @@ func TestScanAllErrorsStayWithTheirRepo(t *testing.T) {
 		}
 		return okScan("", name, o)
 	}
-	got, err := scanAll(context.Background(), sources(6), t.TempDir(), scan.Options{}, clone, scanDir, &bytes.Buffer{})
+	got, err := scanAll(context.Background(), sources(6), t.TempDir(), defaultParallel, scan.Options{}, clone, scanDir, &bytes.Buffer{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +239,7 @@ func TestScanAllPrintsFailures(t *testing.T) {
 		return repo.Checkout{}, nil
 	}
 	var progress bytes.Buffer
-	if _, err := scanAll(context.Background(), srcs, t.TempDir(), scan.Options{}, clone, okScan, &progress); err != nil {
+	if _, err := scanAll(context.Background(), srcs, t.TempDir(), defaultParallel, scan.Options{}, clone, okScan, &progress); err != nil {
 		t.Fatal(err)
 	}
 	if want := "skill-atlas: h/o/r1 @ v1: ref \"v1\" not found\n"; !strings.Contains(progress.String(), want) {
@@ -226,7 +256,7 @@ func TestScanAllSingleRepoPrintsNoFailure(t *testing.T) {
 		return repo.Checkout{}, errors.New("nope")
 	}
 	var progress bytes.Buffer
-	got, err := scanAll(context.Background(), sources(1), t.TempDir(), scan.Options{}, clone, okScan, &progress)
+	got, err := scanAll(context.Background(), sources(1), t.TempDir(), defaultParallel, scan.Options{}, clone, okScan, &progress)
 	if err != nil || len(got) != 1 || got[0].err == nil || got[0].err.Error() != "nope" {
 		t.Fatalf("got %+v, %v; want the error unchanged on the result", got, err)
 	}
@@ -245,15 +275,15 @@ func TestScanAllInterrupted(t *testing.T) {
 		<-ctx.Done()
 		return repo.Checkout{}, fmt.Errorf("clone x: %w", ctx.Err())
 	}
-	got, err := scanAll(ctx, sources(6), t.TempDir(), scan.Options{}, clone, okScan, &progress)
+	got, err := scanAll(ctx, sources(6), t.TempDir(), defaultParallel, scan.Options{}, clone, okScan, &progress)
 	if !errors.Is(err, context.Canceled) || got != nil {
 		t.Fatalf("got %v, %v; want context.Canceled and no results", got, err)
 	}
 	if code := failure(&bytes.Buffer{}, err); code != exitInterrupted {
 		t.Errorf("exit = %d, want %d", code, exitInterrupted)
 	}
-	if n := started.Load(); n > maxClones {
-		t.Errorf("%d clones started, want at most %d", n, maxClones)
+	if n := started.Load(); n > defaultParallel {
+		t.Errorf("%d clones started, want at most %d", n, defaultParallel)
 	}
 	if strings.Contains(progress.String(), "skill-atlas:") {
 		t.Errorf("progress %q reports cancelled clones as failures", progress.String())

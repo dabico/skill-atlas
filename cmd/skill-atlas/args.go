@@ -5,13 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"skill-atlas/internal/scan"
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]...
+  skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<ref>]...
 
 Arguments:
   <git-url>[#<ref>]    repository to scan; #<ref> picks a branch or tag (default: remote's default branch)
@@ -19,6 +20,7 @@ Arguments:
 Flags:
   --html              open the results as an HTML file in the web browser instead of the TUI
   --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
+  --parallel <n>       clone at most n repositories at once (default: 4, minimum: 1)
   -h, --help           show this help
 `
 
@@ -31,10 +33,11 @@ const (
 
 // command is the result of parsing the command line.
 type command struct {
-	action  action
-	repos   []repoArg // in command-line order
-	html    bool
-	exclude []string // --exclude patterns, in order
+	action   action
+	repos    []repoArg // in command-line order
+	html     bool
+	exclude  []string // --exclude patterns, in order
+	parallel int      // --parallel value, or defaultParallel
 }
 
 // repoArg is one <git-url>[#<ref>] argument; ref is empty for the remote's default branch.
@@ -68,6 +71,15 @@ func parseScan(args []string) (command, error) {
 	html := fs.Bool("html", false, "")
 	var exclude stringList
 	fs.Var(&exclude, "exclude", "")
+	parallel := defaultParallel
+	fs.Func("parallel", "", func(s string) error {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 {
+			return fmt.Errorf("%q is not an integer of 1 or more", s)
+		}
+		parallel = n
+		return nil
+	})
 
 	var rawURLs []string
 	for {
@@ -103,5 +115,5 @@ func parseScan(args []string) (command, error) {
 		}
 		repos[i] = r
 	}
-	return command{action: actionScan, repos: repos, html: *html, exclude: exclude}, nil
+	return command{action: actionScan, repos: repos, html: *html, exclude: exclude, parallel: parallel}, nil
 }

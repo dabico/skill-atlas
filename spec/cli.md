@@ -105,7 +105,7 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 ## Scan command
 
 ```shell
-skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]...
+skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<ref>]...
 ```
 
 - The command takes 1 or more remote Git URLs, over HTTPS or SSH. Local paths aren't supported. No URL is a usage error (`scan needs a git url`).
@@ -114,7 +114,7 @@ skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]...
 - Without a ref, the scan uses the remote's default branch (`HEAD`).
 - Commit SHAs aren't supported. An unknown ref fails the scan with an error.
 - The same repository can appear more than once with different refs. The same repository with the same ref twice is a usage error (exit 2): `github.com/org/repo given twice`, or `github.com/org/repo @ v1 given twice` when a ref is set. The check compares the short form shown in the results, so `https://github.com/org/repo` and `git@github.com:org/repo.git` count as the same repository. It runs after the URLs are parsed. A URL that doesn't parse is an exit 1 error. With several URLs, that error starts with the bad URL.
-- With several URLs the tool clones up to 4 repositories at the same time and prints `Cloning <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.
+- With several URLs the tool clones up to `--parallel` repositories at the same time and prints `Cloning <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.
 - With several URLs, a repository that fails to clone or scan doesn't stop the others. The tool records the failure for that repository and prints `skill-atlas: <repo>[ @ <ref>]: <error>` to stderr as it happens, before the TUI or report starts. Escape sequences in the error text are removed.
 - When some repositories fail, the TUI or the report shows all of them in command-line order, with the failed ones marked. The tool then exits 1, after the TUI quits or the report opens, so scripts can tell that the result is incomplete.
 - When every repository fails, the tool exits 1 and shows no TUI and writes no report file.
@@ -123,6 +123,7 @@ skill-atlas scan [--html] [--exclude <pattern>]... <git-url>[#<ref>]...
 - `--html` writes the results to an HTML file and opens it in the web browser instead of showing the TUI. See [HTML report](#html-report).
 - `--exclude` skips `SKILL.md` files by path. The flag is repeatable and applies to every repository.
 - Details are under [Excluded paths](#excluded-paths).
+- `--parallel <n>` sets how many repositories clone at the same time. The default is 4. `<n>` is an integer of 1 or more, with no upper limit. Both `--parallel <n>` and `--parallel=<n>` work. Any other value (0, a negative number, text or nothing) is a usage error and exits 2.
 - Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
 - Clones are shallow (depth 1). The scan doesn't need history.
 - The results show the commit SHA that was scanned, per repository.

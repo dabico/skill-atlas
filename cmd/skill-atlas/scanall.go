@@ -13,8 +13,8 @@ import (
 	"skill-atlas/internal/scan"
 )
 
-// maxClones is how many repositories are cloned at once.
-const maxClones = 4
+// defaultParallel is how many repositories are cloned at once unless --parallel says otherwise.
+const defaultParallel = 4
 
 // source is one repository to scan; ref is empty for the remote's default branch.
 type source struct {
@@ -51,13 +51,13 @@ func (s source) label() string {
 	return s.target.Display
 }
 
-// scanAll clones and scans srcs, at most maxClones at a time, each in its own subdirectory of root.
+// scanAll clones and scans srcs, at most parallel at a time, each in its own subdirectory of root.
 // A failing repository is recorded in its result and doesn't stop the others. With several
 // repositories each failure is printed to progress as it happens. Results keep the order of srcs.
 // The error is non-nil only when ctx is cancelled.
-func scanAll(ctx context.Context, srcs []source, root string, opts scan.Options, clone cloneFunc, scanDir scanFunc, progress io.Writer) ([]scanned, error) {
+func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts scan.Options, clone cloneFunc, scanDir scanFunc, progress io.Writer) ([]scanned, error) {
 	out := make([]scanned, len(srcs))
-	sem := make(chan struct{}, maxClones)
+	sem := make(chan struct{}, parallel)
 	var (
 		wg sync.WaitGroup
 		mu sync.Mutex
