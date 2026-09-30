@@ -41,6 +41,15 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
 - Symlinks are ignored. Submodules are skipped.
   Source: "Ignore symlinks", "Skip submodules for now"
 
+## Multi-repo scan (PR #5)
+
+- `scan` takes several Git URLs. The ref only goes on the URL as `<url>#<ref>`. The `--ref` flag is gone.
+  Source: "Get rid of `--ref` flag entirely, we will just use references in the URL itself"
+- By default the scan returns partial results. The repos that fail are marked in the TUI and the report, and their errors go to stderr. The exit code is 1 if any repo failed, and 1 with no UI if all failed. A fail-fast flag may come later and isn't built yet.
+  Source: "Fail-fast should not be the default, partial results should. That should be a new flag that we can add later". The maintainer picked exit 1 over exit 0.
+- `--parallel N` sets how many clones run at once. The default is 4 and the minimum is 1.
+  Source: "Pralellism should also be flag-configurable". The maintainer picked the name `--parallel`.
+
 ## Stack
 
 - Go 1.27.1, module `skill-atlas`. Charm v2 (bubbletea, lipgloss, glamour), go-git v5, go.yaml.in/yaml/v3.
@@ -89,3 +98,7 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
 | `--html` serves the page once over loopback              | Write a file and open it                          | Maintainer's review of PR #2: no server needed                         |
 | No JavaScript in the HTML page                           | 1 inline filter script pinned by CSP hash         | Filter needs JS                                                        |
 | Codex fields plus HTML as a stacked PR                   | Claude Code fields only, single PR #4             | Maintainer cancelled mid-run                                           |
+| `--ref` as the default ref for URLs without `#<ref>`     | `#<ref>` on the URL only                          | Maintainer's review of PR #5                                           |
+| Fail-fast: 1 bad repo fails the whole multi-repo scan    | Partial results, exit 1                           | Maintainer's review of PR #5; fail-fast may return as a flag           |
+| Parallel clone limit fixed at 4 (`maxClones`)            | `--parallel N`, default 4                         | Maintainer's review of PR #5                                           |
+| `README.md` and `memory/` left out of feature PRs        | Both committed to PR #5                           | Maintainer's call on PR #5                                             |

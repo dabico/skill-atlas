@@ -6,15 +6,12 @@ type: project
 
 # Open items
 
-Last updated 2026-09-30. `main` is at `17002dd`: PRs #1 to #4 merged, then the maintainer committed `README.md`, `AGENTS.md` (`CLAUDE.md` symlinks to it), `memory/`, `.gitignore` and a PR template.
+Last updated 2026-09-30. `main` is at `0a2c14b`: PRs #1 to #4 merged, then the maintainer committed `README.md`, `AGENTS.md` (`CLAUDE.md` symlinks to it), `memory/`, `.gitignore`, a PR template and the `record-demo` skill.
 
 ## Open PRs
 
-None. Worktrees and feature branches are gone.
-
-## Uncommitted
-
-- `.claude/skills/record-demo/`: local skill that records TUI and HTML demos into `docs/demo/`. Neither is committed; the maintainer decides.
+- #5 `feature/multi-repo`: several Git URLs per scan, `<url>#<ref>`, parallel clones, TUI and HTML grouped per repo. Also `DEMO_ARGS` and `assets/multi-repo.tape` for `record-demo`. Worktree `.claude/worktrees/multi-repo`. Reworked after the first review: `--ref` removed, partial results with exit 1, `--parallel N`. CI green on 5a30bab; waiting on the maintainer.
+- #5 demo page: `docs/demo/index.html` in that worktree, untracked. The Artifact publish failed: this machine authenticates with `apiKeyHelper`, and Artifacts need a claude.ai login.
 
 ## Known bugs
 
@@ -33,6 +30,7 @@ From a code review run on 2026-09-30. Its fix phase never ran, so none of these 
 
 ## Ideas not started
 
+- A fail-fast flag for multi-repo scans. The maintainer wants it "later"; partial results are the default.
 - Codex fields from `agents/openai.yaml`. Research is in `research/provider-fields.json`.
 - Fields from other tools (VS Code, Cursor and others). Same research file.
 - A README testing section and a `.gitignore` for `.idea/` and `bin/`.
