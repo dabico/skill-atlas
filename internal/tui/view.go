@@ -53,7 +53,11 @@ func (m *model) header() string {
 	if len(m.report.Skills) == 1 {
 		noun = "skill"
 	}
-	right := fmt.Sprintf("%d %s, %d invalid ", len(m.report.Skills), noun, m.invalid)
+	right := fmt.Sprintf("%d %s, %d invalid", len(m.report.Skills), noun, m.invalid)
+	if m.report.Excluded > 0 {
+		right += fmt.Sprintf(", %d excluded", m.report.Excluded)
+	}
+	right += " "
 
 	rw := ansi.StringWidth(right)
 	left = ansi.Truncate(left, max(m.width-rw-1, 0), "…")
@@ -111,8 +115,11 @@ func (m *model) listLines() []string {
 	}
 	if len(m.visible) == 0 {
 		msg := "No skills found"
-		if len(m.report.Skills) > 0 {
+		switch {
+		case len(m.report.Skills) > 0:
 			msg = "No matches"
+		case m.report.Excluded > 0:
+			msg += fmt.Sprintf(" (%d excluded)", m.report.Excluded)
 		}
 		return append(lines, dimStyle.Render(msg))
 	}

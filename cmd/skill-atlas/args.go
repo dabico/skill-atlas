@@ -5,14 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+
+	"skill-atlas/internal/scan"
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--ref <branch|tag>] <git-url>
+  skill-atlas scan [--ref <branch|tag>] [--exclude <pattern>]... <git-url>
 
 Flags:
-  --ref <branch|tag>  branch or tag to scan (default: remote's default branch)
-  -h, --help          show this help
+  --ref <branch|tag>   branch or tag to scan (default: remote's default branch)
+  --exclude <pattern>  skip SKILL.md files matching a gitignore-style pattern (repeatable)
+  -h, --help           show this help
 `
 
 type action int
@@ -24,9 +27,10 @@ const (
 
 // command is the result of parsing the command line.
 type command struct {
-	action action
-	url    string
-	ref    string
+	action  action
+	url     string
+	ref     string
+	exclude []string // --exclude patterns, in order
 }
 
 // usageError is a bad command line; msg may be empty when only usage is shown.
@@ -52,6 +56,8 @@ func parseScan(args []string) (command, error) {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	ref := fs.String("ref", "", "")
+	var exclude stringList
+	fs.Var(&exclude, "exclude", "")
 
 	var urls []string
 	for {
@@ -73,11 +79,16 @@ func parseScan(args []string) (command, error) {
 	if refSet && *ref == "" {
 		return command{}, &usageError{msg: "--ref needs a branch or tag name"}
 	}
+	for _, p := range exclude {
+		if err := scan.CheckPattern(p); err != nil {
+			return command{}, &usageError{msg: fmt.Sprintf("--exclude %q: %v", p, err)}
+		}
+	}
 	switch {
 	case len(urls) == 0:
 		return command{}, &usageError{msg: "scan needs a git url"}
 	case len(urls) > 1:
 		return command{}, &usageError{msg: "scan takes exactly one git url"}
 	}
-	return command{action: actionScan, url: urls[0], ref: *ref}, nil
+	return command{action: actionScan, url: urls[0], ref: *ref, exclude: exclude}, nil
 }

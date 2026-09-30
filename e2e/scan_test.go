@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"skill-atlas/internal/repo"
+	"skill-atlas/internal/scan"
 	"skill-atlas/internal/skill"
 )
 
@@ -30,7 +31,7 @@ func TestPinnedScan(t *testing.T) {
 		t.Errorf("Name = %q, want %q", target.Name, f.name)
 	}
 
-	res := cloneScan(t, f.url, f.tag)
+	res := cloneScan(t, f.url, f.tag, scan.Options{})
 	t.Logf("clone %s@%s took %s", f.name, f.tag, res.cloneDur.Round(100e6))
 	if res.checkout.Ref != f.tag {
 		t.Errorf("Ref = %q, want %q", res.checkout.Ref, f.tag)
@@ -46,6 +47,9 @@ func TestPinnedScan(t *testing.T) {
 	}
 	if !slices.Equal(got, f.paths) {
 		t.Errorf("paths = %v, want %v", got, f.paths)
+	}
+	if res.excluded != 0 {
+		t.Errorf("excluded = %d, want 0", res.excluded)
 	}
 
 	checkGolden(t, f.golden, res.skills)
@@ -85,7 +89,7 @@ func TestFloatingScan(t *testing.T) {
 	}
 	t.Parallel()
 	f := ideavim
-	res := cloneScan(t, f.url, "")
+	res := cloneScan(t, f.url, "", scan.Options{})
 	t.Logf("clone %s@HEAD took %s", f.name, res.cloneDur.Round(100e6))
 	if res.checkout.Ref == "" {
 		t.Error("Ref is empty")
