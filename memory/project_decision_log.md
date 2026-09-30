@@ -86,6 +86,11 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
   - JetBrains/koog `1.3.0` (`3acc88cf`) for `--exclude`. It has 2 skills in test data under `integration-tests/`.
   - zcaceres/skills `zoom@1.0.1` (`1d5af94`, 61 skills) for Claude Code fields. It's a personal repo, so the tag could move. The test checks the SHA, so CI would fail loudly.
 - Every feature ships as a PR gated on green CI. The maintainer reviews and merges (squash).
+- The HTML report gets Playwright screenshot tests for regressions. An intentional change updates the screenshot.
+  Source: "implement E2E tests involving "screenshots" with playright (test for regressions, if functionality changes intentionally then so does the "screenshot")"
+  - playwright-go inside `go test -tags e2e`. `-update` rewrites the baselines, same as the JSON goldens. The maintainer picked it over Node `@playwright/test` and Python via uv.
+  - 1 baseline set, rendered on Linux. The tests skip on macOS. A script runs `-update` in a pinned Linux container. Picked over per-platform baselines and Docker-only runs.
+  - HTML report only. The TUI keeps its text checks. Picked over ANSI text snapshots and xterm.js screenshots.
 
 ## Superseded
 
