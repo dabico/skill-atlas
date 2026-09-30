@@ -78,12 +78,13 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 ## Scan command
 
 ```shell
-skill-atlas scan [--ref <branch|tag>] <git-url>
+skill-atlas scan [--html] [--ref <branch|tag>] <git-url>
 ```
 
 - The first version accepts 1 remote Git URL, over HTTPS or SSH. Local paths aren't supported.
 - Without `--ref`, the scan uses the remote's default branch (`HEAD`).
 - `--ref` takes a branch or tag name. Commit SHAs aren't supported. An unknown ref fails the scan with an error.
+- `--html` shows the results as an HTML page in the web browser instead of the TUI. See [HTML report](#html-report).
 - Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
 - Clones are shallow (depth 1). The scan doesn't need history.
 - The results show the commit SHA that was scanned.
@@ -133,3 +134,49 @@ Split view: skill list on the left, details of the selected skill on the right.
 - A scan with no skills shows `No skills found` in the list pane.
 - The list shows the directory name when a skill has no usable `name`.
 - Footer: key hints.
+
+## HTML report
+
+`skill-atlas scan --html <git-url>` shows the results as a web page instead of the TUI.
+It needs no terminal.
+
+The page has the same information as the TUI:
+
+- Header: repository URL, ref, short commit SHA, skill count, invalid count. The full commit SHA shows as hover text on the short one.
+- Contents: a list that links to each skill. Invalid skills have an `invalid` badge.
+- Skill sections: `name`, path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields, and validation errors for invalid skills. Below that, the full Markdown body, rendered.
+- A scan with no skills shows `No skills found`.
+- The list shows the directory name when a skill has no usable `name`.
+
+### Page
+
+- The page is 1 HTML document with inline CSS. It has no JavaScript and makes no external requests: no remote fonts, scripts, styles or images.
+- A Content Security Policy enforces this: `default-src 'none'; style-src 'unsafe-inline'; img-src data:`.
+- Colors follow the browser's light or dark setting. The layout fits a phone screen.
+- The Markdown body uses GitHub Flavored Markdown. Headings in the body sit 2 levels below the skill `name`.
+- Raw HTML in a body is dropped.
+- A link with a scheme other than `http`, `https` or `mailto` shows as plain text. This covers `javascript:`, `vbscript:`, `data:` and `file:`.
+- Images aren't loaded. The page shows their alt text.
+
+### Delivery
+
+The tool writes no file. After the scan, and after it deletes the clone, it serves the page from memory.
+
+- The server listens on `127.0.0.1` on a random port. The page is at `http://127.0.0.1:<port>/<token>`, where the token is 128 random bits as 32 hex digits. Any other path returns 404.
+- The tool prints `Report: <url>` to stderr, then opens the browser.
+- The server sends the page once. After the browser loads it in full, the server stops and the tool exits with 0.
+- If nothing loads the page within 5 minutes, the scan fails with `the browser didn't load the report within 5m0s`.
+- <kbd>Ctrl+C</kbd> while the tool waits stops it.
+
+### Browser
+
+- If `$BROWSER` is set, the tool runs it with the URL as its only argument. The tool uses no shell, so `$BROWSER` is 1 program name or path.
+- Otherwise the tool runs `open` on macOS, `rundll32 url.dll,FileProtocolHandler` on Windows and `xdg-open` on other systems.
+- If the browser fails to start, the tool prints a warning with the URL and keeps waiting. The user can open the URL by hand.
+
+### Exit codes
+
+- 0: the browser loaded the report.
+- 1: the scan failed, or the browser didn't load the report in time.
+- 2: usage error.
+- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM`.

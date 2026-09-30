@@ -3,8 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
+
+	"golang.org/x/term"
 )
 
 func TestParseArgs(t *testing.T) {
@@ -23,6 +27,13 @@ func TestParseArgs(t *testing.T) {
 		{name: "scan -h", args: []string{"scan", "-h"}, want: command{action: actionHelp}},
 		{name: "scan --help", args: []string{"scan", "--help"}, want: command{action: actionHelp}},
 		{name: "url only", args: []string{"scan", u}, want: command{action: actionScan, url: u}},
+		{name: "html before url", args: []string{"scan", "--html", u}, want: command{action: actionScan, url: u, html: true}},
+		{name: "html after url", args: []string{"scan", u, "--html"}, want: command{action: actionScan, url: u, html: true}},
+		{name: "html with ref", args: []string{"scan", "--html", "--ref", "v1", u}, want: command{action: actionScan, url: u, ref: "v1", html: true}},
+		{name: "ref then html", args: []string{"scan", "--ref=v1", u, "--html"}, want: command{action: actionScan, url: u, ref: "v1", html: true}},
+		{name: "html false", args: []string{"scan", "--html=false", u}, want: command{action: actionScan, url: u}},
+		{name: "html needs url", args: []string{"scan", "--html"}, wantErr: "needs a git url", usage: true},
+		{name: "html takes no value", args: []string{"scan", "--html=maybe", u}, wantErr: "html", usage: true},
 		{name: "flag before url", args: []string{"scan", "--ref", "v1", u}, want: command{action: actionScan, url: u, ref: "v1"}},
 		{name: "flag after url", args: []string{"scan", u, "--ref", "v1"}, want: command{action: actionScan, url: u, ref: "v1"}},
 		{name: "ref equals", args: []string{"scan", "--ref=x", u}, want: command{action: actionScan, url: u, ref: "x"}},
@@ -67,8 +78,10 @@ func TestRunExitCodes(t *testing.T) {
 		wantErrHas string
 	}{
 		{name: "no args", code: exitUsage, wantErrHas: "Usage:"},
-		{name: "help", args: []string{"help"}, code: exitOK, wantOut: "skill-atlas scan [--ref <branch|tag>] <git-url>"},
+		{name: "help", args: []string{"help"}, code: exitOK, wantOut: "skill-atlas scan [--html] [--ref <branch|tag>] <git-url>"},
 		{name: "scan -h", args: []string{"scan", "-h"}, code: exitOK, wantOut: "--ref"},
+		{name: "help lists html", args: []string{"help"}, code: exitOK, wantOut: "--html"},
+		{name: "html bad url", args: []string{"scan", "--html", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
 		{name: "unknown", args: []string{"x"}, code: exitUsage, wantErrHas: `skill-atlas: unknown command "x"`},
 		{name: "no url", args: []string{"scan"}, code: exitUsage, wantErrHas: "Usage:"},
 		{name: "two urls", args: []string{"scan", "a", "b"}, code: exitUsage, wantErrHas: "Usage:"},
@@ -92,5 +105,21 @@ func TestRunExitCodes(t *testing.T) {
 				t.Errorf("usage error wrote to stdout: %q", out.String())
 			}
 		})
+	}
+}
+
+// TestRunTerminalCheck checks that only the TUI needs a terminal; --html gets as far as the clone.
+func TestRunTerminalCheck(t *testing.T) {
+	if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+		t.Skip("stdin and stdout are terminals")
+	}
+	const u = "https://127.0.0.1:1/org/repo.git" // refused at once, no network needed
+	var errb bytes.Buffer
+	if got := run([]string{"scan", u}, io.Discard, &errb); got != exitFail || !strings.Contains(errb.String(), "interactive terminal") {
+		t.Errorf("TUI mode: exit %d, stderr %q, want the terminal error", got, errb.String())
+	}
+	errb.Reset()
+	if got := run([]string{"scan", "--html", u}, io.Discard, &errb); got != exitFail || strings.Contains(errb.String(), "interactive terminal") {
+		t.Errorf("--html mode: exit %d, stderr %q, want a clone failure", got, errb.String())
 	}
 }

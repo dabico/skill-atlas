@@ -8,10 +8,11 @@ import (
 )
 
 const usageText = `Usage:
-  skill-atlas scan [--ref <branch|tag>] <git-url>
+  skill-atlas scan [--html] [--ref <branch|tag>] <git-url>
 
 Flags:
-  --ref <branch|tag>  branch or tag to scan (default: remote's default branch)
+  --html              show the results as an HTML page in the web browser instead of the TUI
+  --ref<branch|tag>  branch or tag to scan (default: remote's default branch)
   -h, --help          show this help
 `
 
@@ -27,6 +28,7 @@ type command struct {
 	action action
 	url    string
 	ref    string
+	html   bool
 }
 
 // usageError is a bad command line; msg may be empty when only usage is shown.
@@ -52,6 +54,7 @@ func parseScan(args []string) (command, error) {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	ref := fs.String("ref", "", "")
+	html := fs.Bool("html", false, "")
 
 	var urls []string
 	for {
@@ -79,5 +82,5 @@ func parseScan(args []string) (command, error) {
 	case len(urls) > 1:
 		return command{}, &usageError{msg: "scan takes exactly one git url"}
 	}
-	return command{action: actionScan, url: urls[0], ref: *ref}, nil
+	return command{action: actionScan, url: urls[0], ref: *ref, html: *html}, nil
 }
