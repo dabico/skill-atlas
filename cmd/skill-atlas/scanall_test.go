@@ -111,10 +111,14 @@ func TestScanAllFailFast(t *testing.T) {
 	srcs := sources(3)
 	boom := errors.New("boom")
 	var canceled atomic.Int32
+	var running sync.WaitGroup
+	running.Add(2)
 	clone := func(ctx context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
 		if tg.Name == "r1" {
+			running.Wait() // fail only once both siblings are cloning
 			return repo.Checkout{}, boom
 		}
+		running.Done()
 		select {
 		case <-ctx.Done():
 			canceled.Add(1)
