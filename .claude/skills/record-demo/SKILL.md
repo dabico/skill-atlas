@@ -34,6 +34,7 @@ A full run takes about 1 minute. Each mode clones the demo repo once.
 Environment variables:
 
 - `DEMO_URL`, `DEMO_REF`: repo and tag to scan. Default `https://github.com/zcaceres/skills.git` at `zoom@1.0.1`: 61 skills, 2 invalid, and several Claude Code fields.
+- `DEMO_ARGS`: scan arguments, split on spaces. Replaces `--ref <DEMO_REF> <DEMO_URL>` in both modes, e.g. for several URLs.
 - `DEMO_QUERY`: filter text, default `laconic`, a skill with 3 Claude Code fields.
 - `DEMO_OUT`: output dir, default `<checkout>/docs/demo`.
 - `DEMO_SRC`: checkout to build, default the current git root.
@@ -67,7 +68,7 @@ GIFs come out at about 3MB. GitHub renders images up to 10MB in READMEs and PRs.
 Copy `assets/tui-tour.tape`, edit the copy, and pass its path to `demo.sh tui`. Write tapes with the Write tool. A heredoc through the aliased `cat` on this machine injects ANSI codes. `demo.sh` fills these placeholders:
 
 - `{{BIN}}`: dir holding the fresh binary. The hidden setup puts it on `PATH`.
-- `{{CMD}}`: `skill-atlas scan --ref <ref> <url>`.
+- `{{CMD}}`: `skill-atlas scan --ref <ref> <url>`, or `skill-atlas scan <DEMO_ARGS>`.
 - `{{OUT}}`: output dir. Quote paths: `Output "{{OUT}}/x.gif"`. vhs rejects unquoted absolute paths.
 - `{{QUERY}}`: `DEMO_QUERY`.
 
@@ -83,6 +84,15 @@ Hide / Show                     # stop and resume capture
 Wait+Screen@120s /regex/        # wait until the screen matches
 Screenshot "{{OUT}}/name.png"
 ```
+
+`assets/multi-repo.tape` records a scan of several repos: list, the step from one repo's group into the next, and a filter across both. Run it with 2 URLs:
+
+```shell
+DEMO_ARGS='https://github.com/JetBrains/ideavim.git#2.47.1 https://github.com/zcaceres/skills.git#zoom@1.0.1' \
+DEMO_QUERY=docs .claude/skills/record-demo/scripts/demo.sh tui .claude/skills/record-demo/assets/multi-repo.tape
+```
+
+It writes `tui-multi.gif`, `tui-multi.mp4`, `tui-multi-list.png`, `tui-multi-boundary.png` and `tui-multi-filter.png`. The header should read `67 skills, 2 invalid`. With several repos the filter also matches the repo name, so a query like `git` matches every skill from `github.com`.
 
 Keep the `Hide` / `Wait+Screen` / `Show` block after the scan command. It waits for the header (`N skills, M invalid`) and cuts the clone time out of the recording. TUI keys: j/k or arrows move, Tab switches focus, `/` filters (Enter keeps, Esc clears), q quits.
 

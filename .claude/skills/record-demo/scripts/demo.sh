@@ -15,6 +15,8 @@ url=${DEMO_URL:-https://github.com/zcaceres/skills.git}
 ref=${DEMO_REF:-zoom@1.0.1}
 out=${DEMO_OUT:-$root/docs/demo}
 query=${DEMO_QUERY:-laconic}
+# DEMO_ARGS replaces the scan arguments, e.g. several URLs; split on spaces.
+if [[ -n ${DEMO_ARGS:-} ]]; then read -ra scan_args <<<"$DEMO_ARGS"; else scan_args=(--ref "$ref" "$url"); fi
 
 need() { command -v "$1" >/dev/null || { echo "demo.sh: $1 not found. $2" >&2; exit 1; }; }
 need go "Install Go."
@@ -32,7 +34,7 @@ echo "built skill-atlas from $root"
 esc() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
 
 tui() {
-	local tapes=("$@") cmd="skill-atlas scan --ref $ref $url"
+	local tapes=("$@") cmd="skill-atlas scan ${scan_args[*]}"
 	[[ ${#tapes[@]} -gt 0 ]] || tapes=("$skill/assets/tui-tour.tape")
 	for t in "${tapes[@]}"; do
 		local filled
@@ -48,7 +50,7 @@ tui() {
 
 html() {
 	local log="$work/html.log" report
-	if ! BROWSER=true TMPDIR="$work" "$work/bin/skill-atlas" scan --html --ref "$ref" "$url" >/dev/null 2>"$log"; then
+	if ! BROWSER=true TMPDIR="$work" "$work/bin/skill-atlas" scan --html "${scan_args[@]}" >/dev/null 2>"$log"; then
 		cat "$log" >&2
 		exit 1
 	fi
