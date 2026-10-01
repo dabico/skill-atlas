@@ -36,7 +36,7 @@ func multiTotals(t *testing.T) (skills, invalid int) {
 			invalid++
 		}
 	}
-	for _, s := range cloneScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills {
+	for _, s := range downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills {
 		skills++
 		if !s.Valid() {
 			invalid++
@@ -48,12 +48,12 @@ func multiTotals(t *testing.T) (skills, invalid int) {
 func TestTUIMultiRepo(t *testing.T) {
 	t.Parallel()
 	golden := readGolden(t, ideavim.golden)
-	zoom := cloneScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills
+	zoom := downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills
 	total, invalid := multiTotals(t)
 	s := startScan(t, multiArgs()...)
 
 	header := regexp.MustCompile(`2 repositories\s+` + fmt.Sprintf("%d skills, %d invalid", total, invalid))
-	pane := s.waitFor(header, cloneWait)
+	pane := s.waitFor(header, downloadWait)
 	if !strings.Contains(leftPane(pane), ideavim.display) {
 		t.Errorf("list lacks the ideavim group heading:\n%s", pane)
 	}
@@ -119,7 +119,7 @@ func TestTUIPartialFailure(t *testing.T) {
 	s := startScan(t, ideavim.url+"#"+ideavim.tag, badURL)
 
 	header := regexp.MustCompile(`2 repositories\s+` + fmt.Sprintf("%d skills, %d invalid, 1 failed", skills, invalid))
-	pane := s.waitFor(header, cloneWait)
+	pane := s.waitFor(header, downloadWait)
 	if !strings.Contains(leftPane(pane), ideavim.display) || !strings.Contains(leftPane(pane), badDisplay[:30]) { // the list pane cuts long headings
 		t.Errorf("list lacks a group heading:\n%s", pane)
 	}
@@ -143,7 +143,7 @@ func TestTUIPartialFailure(t *testing.T) {
 func TestTUIAllReposFail(t *testing.T) {
 	t.Parallel()
 	s := startScan(t, badURL+"#no-such-ref-e2e", badURL)
-	if code := s.waitExit(2 * cloneWait); code != 1 {
+	if code := s.waitExit(2 * downloadWait); code != 1 {
 		t.Errorf("exit code = %d, want 1\n%s", code, s.last)
 	}
 	if !strings.Contains(s.last, "skill-atlas: "+badDisplay+" @ no-such-ref-e2e: ") || strings.Contains(s.last, "repositories") {
@@ -199,7 +199,7 @@ func TestHTMLAllReposFail(t *testing.T) {
 func TestHTMLMultiRepo(t *testing.T) {
 	t.Parallel()
 	golden := readGolden(t, ideavim.golden)
-	zoom := cloneScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills
+	zoom := downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills
 	total, invalid := multiTotals(t)
 
 	r := runHTML(t, requireTool(t, "true"), nil, multiArgs()...)

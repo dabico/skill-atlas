@@ -108,14 +108,17 @@ Where the specification page is silent, Skill Atlas matches the [skills-ref](htt
 skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<ref>]...
 ```
 
-- The command takes 1 or more remote Git URLs, over HTTPS or SSH. Local paths aren't supported. No URL is a usage error (`scan needs a git url`).
+- The command takes 1 or more GitHub repository URLs. Local paths aren't supported. No URL is a usage error (`scan needs a git url`).
+- Only `github.com` is supported. The host check ignores letter case. A URL for any other host fails with an error, e.g. `unsupported host "gitlab.com", only github.com is supported`.
+- The repository path must be `<owner>/<repo>`, with or without `.git`. Any other path is an error, e.g. `https://github.com/org/repo/tree/main`.
+- HTTPS URLs and SSH URLs (`git@github.com:org/repo.git`, `ssh://git@github.com/org/repo`) are both accepted. The tool treats an SSH URL as its HTTPS form: it doesn't use SSH, the SSH agent or `~/.ssh/known_hosts`.
 - Flags can come before, between or after the URLs.
 - A URL can end in `#<ref>` to pick the branch or tag for that URL. The tool splits at the first `#`. An empty ref (`<url>#`) is a usage error.
 - Without a ref, the scan uses the remote's default branch (`HEAD`).
 - Commit SHAs aren't supported. An unknown ref fails the scan with an error.
 - The same repository can appear more than once with different refs. The same repository with the same ref twice is a usage error (exit 2): `github.com/org/repo given twice`, or `github.com/org/repo @ v1 given twice` when a ref is set. The check compares the short form shown in the results, so `https://github.com/org/repo` and `git@github.com:org/repo.git` count as the same repository. It runs after the URLs are parsed. A URL that doesn't parse is an exit 1 error. With several URLs, that error starts with the bad URL.
-- With several URLs the tool clones up to `--parallel` repositories at the same time and prints `Cloning <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.
-- With several URLs, a repository that fails to clone or scan doesn't stop the others. The tool records the failure for that repository and prints `skill-atlas: <repo>[ @ <ref>]: <error>` to stderr as it happens, before the TUI or report starts. Escape sequences in the error text are removed.
+- With several URLs the tool downloads up to `--parallel` repositories at the same time and prints `Downloading <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.
+- With several URLs, a repository that fails to download or scan doesn't stop the others. The tool records the failure for that repository and prints `skill-atlas: <repo>[ @ <ref>]: <error>` to stderr as it happens, before the TUI or report starts. Escape sequences in the error text are removed.
 - When some repositories fail, the TUI or the report shows all of them in command-line order, with the failed ones marked. The tool then exits 1, after the TUI quits or the report opens, so scripts can tell that the result is incomplete.
 - When every repository fails, the tool exits 1 and shows no TUI and writes no report file.
 - With 1 URL, a failure prints `skill-atlas: <error>` without the repository prefix and exits 1.
@@ -123,24 +126,31 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 - `--html` writes the results to an HTML file and opens it in the web browser instead of showing the TUI. See [HTML report](#html-report).
 - `--exclude` skips `SKILL.md` files by path. The flag is repeatable and applies to every repository.
 - Details are under [Excluded paths](#excluded-paths).
-- `--parallel <n>` sets how many repositories clone at the same time. The default is 4. `<n>` is an integer of 1 or more, with no upper limit. Both `--parallel <n>` and `--parallel=<n>` work. Any other value (0, a negative number, text or nothing) is a usage error and exits 2.
-- Cloning uses [go-git](https://github.com/go-git/go-git). The `git` binary isn't required.
-- Clones are shallow (depth 1). The scan doesn't need history.
+- `--parallel <n>` sets how many repositories download at the same time. The default is 4. `<n>` is an integer of 1 or more, with no upper limit. Both `--parallel <n>` and `--parallel=<n>` work. Any other value (0, a negative number, text or nothing) is a usage error and exits 2.
+- The tool doesn't clone. It lists the remote refs over HTTPS with [go-git](https://github.com/go-git/go-git) (`ls-remote`) to find the commit of the ref. Then it downloads the tarball of that commit from `https://github.com/<owner>/<repo>/archive/<sha>.tar.gz`. The `git` binary isn't required.
+- The scan doesn't need history, so the tarball of 1 commit is enough.
+- An annotated tag resolves to the commit it points to.
+- If the tarball names a different commit than the one resolved, the download fails with an error.
 - The results show the commit SHA that was scanned, per repository.
-- Public repositories over HTTPS need no credentials. Private repositories over HTTPS aren't supported.
-- SSH URLs authenticate through the SSH agent (`SSH_AUTH_SOCK`). Host keys are checked against `~/.ssh/known_hosts`.
-- Cloning never prompts. If the clone needs input it can't get, the scan fails with an error, e.g. `authentication failed for <url>`.
+- Both steps go over HTTPS and send no credentials. Public repositories need none.
+- Private repositories aren't supported, whatever the URL form. GitHub answers as for a repository that doesn't exist, so the error reads `authentication failed for github.com/org/repo: the repository may be private or may not exist`.
+- The download never prompts. Pressing <kbd>Ctrl+C</kbd> stops it.
 
 ### Scan scope
 
-The scan walks every tracked file in the clone, except `.git/`.
-It has no ignore list of its own, since a fresh clone only contains tracked files.
+The tarball holds the tracked files of 1 commit. It has no `.git/` directory.
+The scan walks every file in it.
+It has no ignore list of its own, since the tarball only contains tracked files.
 Only the [excluded paths](#excluded-paths) are skipped.
+
+Submodules aren't in the tarball, so the scan doesn't see them.
+Files that the repository marks `export-ignore` in `.gitattributes` aren't in the tarball either.
+The tool skips symlinks and hard links in the tarball. It writes only regular files and directories.
+A tarball entry with an absolute path or a path that leaves the download directory fails the download.
 
 A `SKILL.md` nested inside another skill's directory is a separate skill.
 
-The scan ignores symlinks, both to files and to directories.
-Each skill appears once, at its real path, and the scan never reads outside the clone.
+Each skill appears once, at its real path, and the scan never reads outside the download.
 
 ### Excluded paths
 
@@ -155,10 +165,10 @@ Pass the flag more than once to add patterns. Both `--exclude <pattern>` and `--
 - `**` matches any number of directories: `**/old`, `skills/**/draft`. It must fill a whole path segment, so `a**b` is an error.
 - A pattern that matches a directory excludes everything below it. A trailing `/` limits the pattern to directories.
 - A leading `!` re-includes paths that an earlier pattern matched. The last matching pattern wins. Unlike git, `!` can re-include a file inside an excluded directory.
-- An empty or malformed pattern is a usage error (exit 2), reported before the clone starts.
+- An empty or malformed pattern is a usage error (exit 2), reported before the download starts.
 
 Excluded files are counted and never parsed.
-Symlinks and `.git/` stay ignored and aren't counted.
+Symlinks are skipped and aren't counted.
 The TUI and the HTML report show the count (see [TUI](#tui) and [HTML report](#html-report)).
 
 Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' <git-url>`.
@@ -166,7 +176,8 @@ Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' 
 ### State
 
 The tool stores no state, with 1 exception: the HTML report file (see [Delivery](#delivery)).
-The clones go into one temporary directory, with a subdirectory per repository. The tool deletes it before it exits.
+The downloads go into one temporary directory, with a subdirectory per repository. The tool deletes it before it exits.
+The tarball is unpacked while it arrives. It isn't saved as a file.
 Results are discarded after the scan. `--html` keeps the report file in the OS temp directory.
 
 ## TUI
@@ -214,7 +225,7 @@ This is the layout for 1 repository. See [Several repositories](#several-reposit
 - The list is grouped by repository, in command-line order. Each group starts with a heading row, `<repo> @ <ref> (<short sha>)`. Headings can't be selected. The cursor skips them.
 - When the cursor is on the first skill of a group, the list scrolls to show the heading too, if it fits.
 - A repository with no skills shows its heading and a dim `No skills found` row. With exclusions the row reads `No skills found (2 excluded)`. The row isn't shown while a filter is active.
-- A repository that failed shows its heading and, under it, a row with the error message in the warning style, e.g. `authentication failed for github.com/org/b`. The heading has no `(<short sha>)` when the clone did not finish. The error row can't be selected and the cursor skips it. Like the `No skills found` row it is not shown while a filter is active. A message longer than the list pane is cut with `…`. The full message is on stderr. Escape sequences in it are removed.
+- A repository that failed shows its heading and, under it, a row with the error message in the warning style, e.g. `authentication failed for github.com/org/b`. The heading has no `(<short sha>)` when the download did not finish. The error row can't be selected and the cursor skips it. Like the `No skills found` row it is not shown while a filter is active. A message longer than the list pane is cut with `…`. The full message is on stderr. Escape sequences in it are removed.
 - The filter also matches the repository name. A heading shows only while a skill in its group matches. `Skills N/M` counts skills only.
 - The first line of the detail pane is the dim repository label, then the skill path.
 - The minimum terminal size stays 60x12.
@@ -238,7 +249,7 @@ The page has the same information as the TUI:
 - The `<h1>` reads `N repositories`, followed by the totals line. There is no single ref or SHA line.
 - Contents are grouped by repository. Each group has a heading with the repository name, ref, short SHA (the full SHA is the hover text) and its own counts, e.g. `2 skills, 1 invalid, 1 excluded`.
 - A repository with no skills shows `No skills found` (or `No skills found (2 excluded)`) in the contents. It has no skill sections.
-- A repository that failed shows in the contents and as a section group, each with the heading (`failed` in place of the counts) and the error message as a note. The heading has no short SHA when the clone did not finish. Like the empty-repository note, the note hides while a filter is active. The message is escaped and has no escape sequences.
+- A repository that failed shows in the contents and as a section group, each with the heading (`failed` in place of the counts) and the error message as a note. The heading has no short SHA when the download did not finish. Like the empty-repository note, the note hides while a filter is active. The message is escaped and has no escape sequences.
 - The totals line ends with `, Z failed` when Z repositories failed.
 - Skill sections sit under a heading per repository. Section ids are `repo-<R>-skill-<N>`, counted from 1. With 1 repository the ids stay `skill-<N>`.
 - Heading levels nest: the page title is `h1`, repository headings are `h2` and skill names `h3`. Headings in a body keep the same offset below the skill name as with 1 repository. Levels stop at `h6`.
@@ -271,7 +282,7 @@ A text box can't be filtered with CSS alone. CSS selectors see the `value` attri
 
 ### Delivery
 
-After the scan, and after the tool deletes the clone, it writes the page to a new file in the OS temp directory. The file is named `skill-atlas-report-<random>.html` and is readable by its owner only.
+After the scan, and after the tool deletes the downloads, it writes the page to a new file in the OS temp directory. The file is named `skill-atlas-report-<random>.html` and is readable by its owner only.
 
 - The tool prints `Report: <absolute path>` to stderr.
 - The tool opens the file in the browser as a `file://` URL, then exits with 0.
@@ -289,6 +300,6 @@ After the scan, and after the tool deletes the clone, it writes the page to a ne
 ### Exit codes
 
 - 0: the tool wrote the report and launched the browser, or warned that the launch failed.
-- 1: a repository failed to clone or scan, or the tool couldn't write the report file. With several repositories, the tool still shows the ones that worked (TUI or report) and exits 1 afterwards. If every repository failed, there is no TUI and no report file.
+- 1: a repository failed to download or scan, or the tool couldn't write the report file. With several repositories, the tool still shows the ones that worked (TUI or report) and exits 1 afterwards. If every repository failed, there is no TUI and no report file.
 - 2: usage error, including the same repository and ref given twice.
-- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM` during the clones.
+- 130: interrupted with <kbd>Ctrl+C</kbd> or `SIGTERM` during the downloads.

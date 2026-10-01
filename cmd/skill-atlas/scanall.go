@@ -13,7 +13,7 @@ import (
 	"skill-atlas/internal/scan"
 )
 
-// defaultParallel is how many repositories are cloned at once unless --parallel says otherwise.
+// defaultParallel is how many repositories are downloaded at once unless --parallel says otherwise.
 const defaultParallel = 4
 
 // source is one repository to scan; ref is empty for the remote's default branch.
@@ -27,15 +27,15 @@ type scanned struct {
 	source
 	checkout repo.Checkout
 	res      scan.Result
-	err      error // why the clone or scan failed; checkout and res may be empty
+	err      error // why the download or scan failed; checkout and res may be empty
 }
 
 type (
-	cloneFunc func(ctx context.Context, t repo.Target, ref, dir string) (repo.Checkout, error)
-	scanFunc  func(root, rootName string, opts scan.Options) (scan.Result, error)
+	downloadFunc func(ctx context.Context, t repo.Target, ref, dir string) (repo.Checkout, error)
+	scanFunc     func(root, rootName string, opts scan.Options) (scan.Result, error)
 )
 
-// shownRef is the resolved ref, or the requested one when the clone failed.
+// shownRef is the resolved ref, or the requested one when the download failed.
 func (s scanned) shownRef() string {
 	if s.checkout.Ref != "" {
 		return s.checkout.Ref
@@ -51,11 +51,11 @@ func (s source) label() string {
 	return s.target.Display
 }
 
-// scanAll clones and scans srcs, at most parallel at a time, each in its own subdirectory of root.
+// scanAll downloads and scans srcs, at most parallel at a time, each in its own subdirectory of root.
 // A failing repository is recorded in its result and doesn't stop the others. With several
 // repositories each failure is printed to progress as it happens. Results keep the order of srcs.
 // The error is non-nil only when ctx is cancelled.
-func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts scan.Options, clone cloneFunc, scanDir scanFunc, progress io.Writer) ([]scanned, error) {
+func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts scan.Options, download downloadFunc, scanDir scanFunc, progress io.Writer) ([]scanned, error) {
 	out := make([]scanned, len(srcs))
 	sem := make(chan struct{}, parallel)
 	var (
@@ -80,11 +80,11 @@ func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts
 			}
 
 			mu.Lock()
-			fmt.Fprintf(progress, "Cloning %s…\n", s.label())
+			fmt.Fprintf(progress, "Downloading %s…\n", s.label())
 			mu.Unlock()
 
 			dir := filepath.Join(root, fmt.Sprintf("repo-%d", i))
-			checkout, err := clone(ctx, s.target, s.ref, dir)
+			checkout, err := download(ctx, s.target, s.ref, dir)
 			if err == nil {
 				out[i].checkout = checkout
 				out[i].res, err = scanDir(dir, s.target.Name, opts)

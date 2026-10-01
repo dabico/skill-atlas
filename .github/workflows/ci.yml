@@ -78,7 +78,7 @@ jobs:
         run: go test -short -race ./...
 
   network:
-    name: Network clone tests (real GitHub)
+    name: Network download tests (real GitHub)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -31,8 +31,8 @@ func TestPinnedScan(t *testing.T) {
 		t.Errorf("Name = %q, want %q", target.Name, f.name)
 	}
 
-	res := cloneScan(t, f.url, f.tag, scan.Options{})
-	t.Logf("clone %s@%s took %s", f.name, f.tag, res.cloneDur.Round(100e6))
+	res := downloadScan(t, f.url, f.tag, scan.Options{})
+	t.Logf("download %s@%s took %s", f.name, f.tag, res.downloadDur.Round(100e6))
 	if res.checkout.Ref != f.tag {
 		t.Errorf("Ref = %q, want %q", res.checkout.Ref, f.tag)
 	}
@@ -89,8 +89,8 @@ func TestFloatingScan(t *testing.T) {
 	}
 	t.Parallel()
 	f := ideavim
-	res := cloneScan(t, f.url, "", scan.Options{})
-	t.Logf("clone %s@HEAD took %s", f.name, res.cloneDur.Round(100e6))
+	res := downloadScan(t, f.url, "", scan.Options{})
+	t.Logf("download %s@HEAD took %s", f.name, res.downloadDur.Round(100e6))
 	if res.checkout.Ref == "" {
 		t.Error("Ref is empty")
 	}

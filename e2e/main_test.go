@@ -1,6 +1,6 @@
 //go:build e2e
 
-// Package e2e runs the built skill-atlas binary and the clone+scan pipeline against real remote repositories.
+// Package e2e runs the built skill-atlas binary and the download+scan pipeline against real remote repositories.
 package e2e
 
 import (
@@ -109,15 +109,15 @@ var ideavim = fixture{
 	golden: "ideavim-2.47.1.golden.json",
 }
 
-// scanned is a cloned url+ref and the result of scanning it.
+// scanned is a downloaded url+ref and the result of scanning it.
 type scanned struct {
-	target   repo.Target
-	checkout repo.Checkout
-	dir      string // the clone, kept until the scratch root is removed
-	skills   []skill.Skill
-	excluded int
-	cloneDur time.Duration
-	err      error
+	target      repo.Target
+	checkout    repo.Checkout
+	dir         string // the download, kept until the scratch root is removed
+	skills      []skill.Skill
+	excluded    int
+	downloadDur time.Duration
+	err         error
 }
 
 type cacheEntry struct {
@@ -130,8 +130,8 @@ var (
 	cacheMu sync.Mutex
 )
 
-// cloneScan clones url@ref once per process and scans the clone with opts.
-func cloneScan(t testing.TB, url, ref string, opts scan.Options) scanned {
+// downloadScan downloads url@ref once per process and scans the download with opts.
+func downloadScan(t testing.TB, url, ref string, opts scan.Options) scanned {
 	t.Helper()
 	key := url + "|" + ref
 	cacheMu.Lock()
@@ -143,7 +143,7 @@ func cloneScan(t testing.TB, url, ref string, opts scan.Options) scanned {
 	cacheMu.Unlock()
 
 	e.once.Do(func() {
-		dir := mkdir(t, "clone-")
+		dir := mkdir(t, "download-")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		target, err := repo.ParseURL(url)
@@ -153,8 +153,8 @@ func cloneScan(t testing.TB, url, ref string, opts scan.Options) scanned {
 		}
 		e.res.target = target
 		start := time.Now()
-		co, err := repo.Clone(ctx, target, ref, dir)
-		e.res.cloneDur = time.Since(start)
+		co, err := repo.Download(ctx, target, ref, dir)
+		e.res.downloadDur = time.Since(start)
 		if err != nil {
 			e.res.err = err
 			return
@@ -163,7 +163,7 @@ func cloneScan(t testing.TB, url, ref string, opts scan.Options) scanned {
 		e.res.dir = dir
 	})
 	if e.res.err != nil {
-		t.Fatalf("clone %s@%q: %v", url, ref, e.res.err)
+		t.Fatalf("download %s@%q: %v", url, ref, e.res.err)
 	}
 	res := e.res
 	r, err := scan.Dir(res.dir, res.target.Name, opts)

@@ -6,18 +6,33 @@ import (
 )
 
 func TestParseURL(t *testing.T) {
+	gh := func(url string) Target {
+		return Target{URL: url, Remote: "https://github.com/org/repo.git", Display: "github.com/org/repo", Owner: "org", Name: "repo"}
+	}
 	tests := []struct {
 		in   string
 		want Target
 	}{
-		{"https://github.com/org/repo.git", Target{URL: "https://github.com/org/repo.git", Display: "github.com/org/repo", Name: "repo"}},
-		{"  https://github.com/org/repo/  ", Target{URL: "https://github.com/org/repo/", Display: "github.com/org/repo", Name: "repo"}},
-		{"https://user:secret@github.com/org/repo", Target{URL: "https://user:secret@github.com/org/repo", Display: "github.com/org/repo", Name: "repo"}},
-		{"https://gitlab.com:8443/a/b/c.git", Target{URL: "https://gitlab.com:8443/a/b/c.git", Display: "gitlab.com/a/b/c", Name: "c"}},
-		{"git@github.com:org/repo.git", Target{URL: "git@github.com:org/repo.git", Display: "github.com/org/repo", Name: "repo", SSH: true}},
-		{"github.com:org/repo", Target{URL: "github.com:org/repo", Display: "github.com/org/repo", Name: "repo", SSH: true}},
-		{"ssh://git@github.com/org/repo.git", Target{URL: "ssh://git@github.com/org/repo.git", Display: "github.com/org/repo", Name: "repo", SSH: true}},
-		{"ssh://bob@example.com:2222/srv/repo.git", Target{URL: "ssh://bob@example.com:2222/srv/repo.git", Display: "example.com/srv/repo", Name: "repo", SSH: true}},
+		{"https://github.com/org/repo.git", gh("https://github.com/org/repo.git")},
+		{"https://github.com/org/repo", gh("https://github.com/org/repo")},
+		{"  https://github.com/org/repo/  ", gh("https://github.com/org/repo/")},
+		{"https://github.com/org/repo.git/", gh("https://github.com/org/repo.git/")},
+		{"https://user:secret@github.com/org/repo", gh("https://user:secret@github.com/org/repo")},
+		{"https://GitHub.COM/org/repo", gh("https://GitHub.COM/org/repo")},
+		{"https://github.com:443/org/repo.git", gh("https://github.com:443/org/repo.git")},
+		{"git@github.com:org/repo.git", gh("git@github.com:org/repo.git")},
+		{"git@github.com:org/repo", gh("git@github.com:org/repo")},
+		{"github.com:org/repo", gh("github.com:org/repo")},
+		{"ssh://git@github.com/org/repo.git", gh("ssh://git@github.com/org/repo.git")},
+		{"ssh://git@github.com/org/repo", gh("ssh://git@github.com/org/repo")},
+		{"https://github.com/JetBrains/ideavim.git", Target{
+			URL: "https://github.com/JetBrains/ideavim.git", Remote: "https://github.com/JetBrains/ideavim.git",
+			Display: "github.com/JetBrains/ideavim", Owner: "JetBrains", Name: "ideavim",
+		}},
+		{"https://github.com/my-org/my.repo_v2", Target{
+			URL: "https://github.com/my-org/my.repo_v2", Remote: "https://github.com/my-org/my.repo_v2.git",
+			Display: "github.com/my-org/my.repo_v2", Owner: "my-org", Name: "my.repo_v2",
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
@@ -28,10 +43,32 @@ func TestParseURL(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
-			if strings.Contains(got.Display, "secret") || strings.Contains(got.Display, "@") {
-				t.Errorf("display leaks userinfo: %q", got.Display)
+			for _, s := range []string{got.Display, got.Remote} {
+				if strings.Contains(s, "secret") || strings.Contains(s, "@") {
+					t.Errorf("%q leaks userinfo", s)
+				}
 			}
 		})
+	}
+}
+
+// The duplicate check compares Display, so every form of 1 repository must give the same one.
+func TestParseURLSameRepo(t *testing.T) {
+	forms := []string{
+		"https://github.com/org/repo",
+		"https://github.com/org/repo.git",
+		"git@github.com:org/repo.git",
+		"ssh://git@github.com/org/repo",
+		"https://GITHUB.com/org/repo/",
+	}
+	for _, f := range forms {
+		got, err := ParseURL(f)
+		if err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		if got.Display != "github.com/org/repo" || got.Remote != "https://github.com/org/repo.git" {
+			t.Errorf("%s: display %q, remote %q", f, got.Display, got.Remote)
+		}
 	}
 }
 
@@ -51,9 +88,24 @@ func TestParseURLErrors(t *testing.T) {
 		{`C:\repo`, "local paths aren't supported"},
 		{"repo", "local paths aren't supported"},
 		{"https:///org/repo", "no host"},
+		{"https://gitlab.com/org/repo.git", `unsupported host "gitlab.com", only github.com is supported`},
+		{"https://gitlab.com:8443/a/b/c.git", `unsupported host "gitlab.com", only github.com is supported`},
+		{"git@gitlab.com:org/repo.git", `unsupported host "gitlab.com"`},
+		{"ssh://bob@example.com:2222/srv/repo.git", `unsupported host "example.com"`},
+		{"https://www.github.com/org/repo", `unsupported host "www.github.com"`},
+		{"https://github.com.evil.test/org/repo", `unsupported host "github.com.evil.test"`},
+		{"https://127.0.0.1/org/repo", `unsupported host "127.0.0.1"`},
 		{"https://github.com", "no repository path"},
 		{"https://github.com/", "no repository path"},
 		{"ssh://git@github.com/.git", "no repository path"},
+		{"https://github.com/org", `repository path "org" isn't <owner>/<repo>`},
+		{"https://github.com/org/repo/tree/main", `repository path "org/repo/tree/main" isn't <owner>/<repo>`},
+		{"https://github.com/a/b/c.git", `repository path "a/b/c" isn't <owner>/<repo>`},
+		{"git@github.com:a/b/c.git", `repository path "a/b/c" isn't <owner>/<repo>`},
+		{"https://github.com/org//repo", "isn't <owner>/<repo>"},
+		{"https://github.com/../repo", "isn't <owner>/<repo>"},
+		{"https://github.com/org/..", "isn't <owner>/<repo>"},
+		{"https://github.com/org/re%20po", "isn't <owner>/<repo>"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {

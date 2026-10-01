@@ -24,7 +24,7 @@ type Repo struct {
 	Skills []skill.Skill
 	// Excluded counts SKILL.md files the scan skipped.
 	Excluded int
-	// Err is why the clone or scan failed; it may contain remote text. Empty when the repository was scanned.
+	// Err is why the download or scan failed; it may contain remote text. Empty when the repository was scanned.
 	Err string
 }
 

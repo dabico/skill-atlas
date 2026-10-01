@@ -116,23 +116,25 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "help", args: []string{"help"}, code: exitOK, wantOut: "skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<ref>]..."},
 		{name: "help says the default ref", args: []string{"help"}, code: exitOK, wantOut: "#<ref> picks a branch or tag"},
 		{name: "help has no --ref", args: []string{"help"}, code: exitOK, wantNotOut: "--ref"},
-		{name: "--ref is unknown", args: []string{"scan", "--ref", "v1", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "flag provided but not defined: -ref"},
-		{name: "--ref= is unknown", args: []string{"scan", "--ref=v1", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "flag provided but not defined: -ref"},
-		{name: "duplicate with ref", args: []string{"scan", "--html", "https://x.test/a/b#v1", "https://x.test/a/b#v1"}, code: exitUsage, wantErrHas: "x.test/a/b @ v1 given twice"},
+		{name: "--ref is unknown", args: []string{"scan", "--ref", "v1", "https://github.com/a/b"}, code: exitUsage, wantErrHas: "flag provided but not defined: -ref"},
+		{name: "--ref= is unknown", args: []string{"scan", "--ref=v1", "https://github.com/a/b"}, code: exitUsage, wantErrHas: "flag provided but not defined: -ref"},
+		{name: "duplicate with ref", args: []string{"scan", "--html", "https://github.com/a/b#v1", "https://github.com/a/b#v1"}, code: exitUsage, wantErrHas: "github.com/a/b @ v1 given twice"},
 		{name: "help lists html", args: []string{"help"}, code: exitOK, wantOut: "--html"},
 		{name: "help lists exclude", args: []string{"help"}, code: exitOK, wantOut: "--exclude <pattern>"},
 		{name: "help lists parallel", args: []string{"help"}, code: exitOK, wantOut: "--parallel <n>"},
-		{name: "parallel zero is usage", args: []string{"scan", "--parallel=0", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "skill-atlas: invalid value \"0\" for flag -parallel"},
+		{name: "parallel zero is usage", args: []string{"scan", "--parallel=0", "https://github.com/a/b"}, code: exitUsage, wantErrHas: "skill-atlas: invalid value \"0\" for flag -parallel"},
 		{name: "html bad url", args: []string{"scan", "--html", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
 		{name: "unknown", args: []string{"x"}, code: exitUsage, wantErrHas: `skill-atlas: unknown command "x"`},
 		{name: "no url", args: []string{"scan"}, code: exitUsage, wantErrHas: "Usage:"},
 		{name: "two bad urls", args: []string{"scan", "a", "b"}, code: exitFail, wantErrHas: "skill-atlas: "},
-		{name: "empty hash ref", args: []string{"scan", "https://x.test/a/b#"}, code: exitUsage, wantErrHas: "missing branch or tag after #"},
-		{name: "duplicate", args: []string{"scan", "--html", "https://x.test/a/b", "https://x.test/a/b.git"}, code: exitUsage, wantErrHas: "x.test/a/b given twice"},
-		{name: "duplicate prints usage", args: []string{"scan", "--html", "https://x.test/a/b", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "Usage:"},
-		{name: "bad url among several", args: []string{"scan", "--html", "https://x.test/a/b", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: `skill-atlas: "http://example.com/a/b.git": `},
-		{name: "empty exclude", args: []string{"scan", "--exclude=", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "--exclude"},
-		{name: "bad exclude glob", args: []string{"scan", "--exclude", "[", "https://x.test/a/b"}, code: exitUsage, wantErrHas: "malformed"},
+		{name: "empty hash ref", args: []string{"scan", "https://github.com/a/b#"}, code: exitUsage, wantErrHas: "missing branch or tag after #"},
+		{name: "duplicate", args: []string{"scan", "--html", "https://github.com/a/b", "https://github.com/a/b.git"}, code: exitUsage, wantErrHas: "github.com/a/b given twice"},
+		{name: "duplicate ssh and https", args: []string{"scan", "--html", "https://github.com/a/b", "git@github.com:a/b.git"}, code: exitUsage, wantErrHas: "github.com/a/b given twice"},
+		{name: "unsupported host", args: []string{"scan", "https://gitlab.com/a/b.git"}, code: exitFail, wantErrHas: `skill-atlas: unsupported host "gitlab.com", only github.com is supported`},
+		{name: "duplicate prints usage", args: []string{"scan", "--html", "https://github.com/a/b", "https://github.com/a/b"}, code: exitUsage, wantErrHas: "Usage:"},
+		{name: "bad url among several", args: []string{"scan", "--html", "https://github.com/a/b", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: `skill-atlas: "http://example.com/a/b.git": `},
+		{name: "empty exclude", args: []string{"scan", "--exclude=", "https://github.com/a/b"}, code: exitUsage, wantErrHas: "--exclude"},
+		{name: "bad exclude glob", args: []string{"scan", "--exclude", "[", "https://github.com/a/b"}, code: exitUsage, wantErrHas: "malformed"},
 		{name: "bad url", args: []string{"scan", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
 		{name: "local path", args: []string{"scan", "/tmp/some/repo"}, code: exitFail, wantErrHas: "skill-atlas: "},
 	}
@@ -158,18 +160,19 @@ func TestRunExitCodes(t *testing.T) {
 	}
 }
 
-// TestRunTerminalCheck checks that only the TUI needs a terminal; --html gets as far as the clone.
+// TestRunTerminalCheck checks that only the TUI needs a terminal; --html gets as far as the download.
 func TestRunTerminalCheck(t *testing.T) {
 	if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
 		t.Skip("stdin and stdout are terminals")
 	}
-	const u = "https://127.0.0.1:1/org/repo.git" // refused at once, no network needed
+	const u = "https://github.com/org/repo.git"
+	d, _ := fakeDeps("repo") // the download fails, no network needed
 	var errb bytes.Buffer
-	if got := run([]string{"scan", u}, io.Discard, &errb); got != exitFail || !strings.Contains(errb.String(), "interactive terminal") {
+	if got := runWith(d, []string{"scan", u}, io.Discard, &errb); got != exitFail || !strings.Contains(errb.String(), "interactive terminal") {
 		t.Errorf("TUI mode: exit %d, stderr %q, want the terminal error", got, errb.String())
 	}
 	errb.Reset()
-	if got := run([]string{"scan", "--html", u}, io.Discard, &errb); got != exitFail || strings.Contains(errb.String(), "interactive terminal") {
-		t.Errorf("--html mode: exit %d, stderr %q, want a clone failure", got, errb.String())
+	if got := runWith(d, []string{"scan", "--html", u}, io.Discard, &errb); got != exitFail || !strings.Contains(errb.String(), "authentication failed for github.com/org/repo") {
+		t.Errorf("--html mode: exit %d, stderr %q, want a download failure", got, errb.String())
 	}
 }

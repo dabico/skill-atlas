@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// FilePrefix starts the name of every report file; the clone directory uses a different prefix.
+// FilePrefix starts the name of every report file; the download directory uses a different prefix.
 const FilePrefix = "skill-atlas-report-"
 
 // WriteFile writes page to a new file in the OS temp dir and returns its absolute path.

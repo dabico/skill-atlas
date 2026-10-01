@@ -40,7 +40,7 @@ func runHTML(t *testing.T, browser string, env []string, args ...string) htmlRun
 	go func() { done <- cmd.Wait() }()
 	select {
 	case <-done:
-	case <-time.After(cloneWait + shortWait):
+	case <-time.After(downloadWait + shortWait):
 		cmd.Process.Kill()
 		<-done
 		t.Fatalf("process didn't exit in time; stderr:\n%s", &stderr)
@@ -58,7 +58,7 @@ func (r htmlRun) reportPath(t *testing.T) string {
 	return m[1]
 }
 
-// assertOnlyReport fails unless TMPDIR holds the report file and nothing else, i.e. no clone directory is left.
+// assertOnlyReport fails unless TMPDIR holds the report file and nothing else, i.e. no download directory is left.
 func assertOnlyReport(t *testing.T, dir, report string) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
