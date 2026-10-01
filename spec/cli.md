@@ -128,14 +128,17 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 - `--exclude` skips `SKILL.md` files by path. The flag is repeatable and applies to every repository.
 - Details are under [Excluded paths](#excluded-paths).
 - `--parallel <n>` sets how many repositories download at the same time. The default is 4. `<n>` is an integer of 1 or more, with no upper limit. Both `--parallel <n>` and `--parallel=<n>` work. Any other value (0, a negative number, text or nothing) is a usage error and exits 2.
-- The tool doesn't clone. It lists the remote refs over HTTPS with [go-git](https://github.com/go-git/go-git) (`ls-remote`) to find the commit of the ref. Then it downloads the tarball of that commit from `https://github.com/<owner>/<repo>/archive/<sha>.tar.gz`. The `git` binary isn't required.
+- The tool doesn't clone. It lists the remote refs over HTTPS with [go-git](https://github.com/go-git/go-git) (`ls-remote`) to find the commit of the ref. Then it downloads the tarball of that commit. The `git` binary isn't required.
+- Without a [GitHub token](#github-token) the tarball comes from `https://github.com/<owner>/<repo>/archive/<sha>.tar.gz`, which redirects to `codeload.github.com`. This route doesn't count against the API rate limit.
+- With a token the tarball comes from the REST API, `GET https://api.github.com/repos/<owner>/<repo>/tarball/<sha>`, because the github.com route ignores tokens and answers 404 for a private repository. The API redirects to a `codeload.github.com` URL that carries its own short-lived token. Each repository download with a token uses 1 API request. A commit already in the cache uses none.
+- Over the API rate limit, a download with a token fails with `GitHub API rate limit exceeded, resets at 14:05`.
 - The scan doesn't need history, so the tarball of 1 commit is enough.
 - An annotated tag resolves to the commit it points to.
 - If the tarball names a different commit than the one resolved, the download fails with an error.
 - A commit that is already in the [archive cache](#state) isn't downloaded again. The ref lookup with ls-remote still runs, so a branch that moved gets its new commit. The tool prints `Downloading <repo>…` in both cases.
 - The results show the commit SHA that was scanned, per repository.
-- Both steps go over HTTPS and send no credentials. Public repositories need none.
-- Private repositories aren't supported, whatever the URL form. GitHub answers as for a repository that doesn't exist, so the error reads `authentication failed for github.com/org/repo: the repository may be private or may not exist`.
+- Both steps go over HTTPS. Public repositories need no credentials. A [GitHub token](#github-token) lets the tool read private repositories and raises the API rate limit.
+- Without a token that can read the repository, a private repository fails the same way as one that doesn't exist, whatever the URL form: `authentication failed for github.com/org/repo: the repository may be private or may not exist`.
 - The download never prompts. Pressing <kbd>Ctrl+C</kbd> stops it.
 
 ### Organizations
@@ -150,13 +153,25 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 - The ref, twice and drop rules run after the URLs are parsed, together with the duplicate check.
 - Before the downloads start, the tool lists each organization, one at a time in command-line order. It prints `Listing repositories in github.com/<org>…` to stderr for each one.
 - The list comes from the GitHub REST API, `GET https://api.github.com/orgs/<org>/repos`, sorted by full name. It includes forks and archived repositories.
-- The request goes over HTTPS and sends no credentials, so the list has only public repositories. GitHub allows 60 requests per hour per IP address without credentials. 1 request returns up to 100 repositories.
-- Over the rate limit, the listing fails with `GitHub API rate limit exceeded, resets at 14:05`, in local time.
+- The request goes over HTTPS. Without a [GitHub token](#github-token) the list has only public repositories, and GitHub allows 60 requests per hour per IP address. With a token the list also has the private repositories the token can see, and the limit is 5,000 requests per hour. 1 request returns up to 100 repositories.
+- Over the rate limit, the listing fails with `GitHub API rate limit exceeded, resets at 14:05`, in local time. When no token was sent, the message ends with `; set GITHUB_TOKEN to raise the limit`.
 - The repositories download with the others, up to `--parallel` at a time. The TUI and the report show them as ordinary repositories in [name order](#order), with the names GitHub returns, e.g. `github.com/JetBrains/ideavim` for `https://github.com/jetbrains`.
 - A listed repository without commits is left out of the results without a message. A repository without commits given by its own URL still fails with `repository github.com/org/repo is empty`.
 - An organization that fails to list becomes 1 failed result, named `github.com/<org>` with no ref or SHA. The other URLs continue. Examples: `github.com/org isn't a GitHub organization or doesn't exist`, the rate limit error, or the HTTP status. A user account gives the first error too, because the API path is for organizations only.
 - An organization with no repositories, or with only empty ones, fails with `no repositories found in github.com/<org>`.
 - Pressing <kbd>Ctrl+C</kbd> during the listing stops the tool with exit 130.
+
+### GitHub token
+
+- The tool reads a token from the environment variable `GITHUB_TOKEN`. If that is unset or empty, it reads `GH_TOKEN`, which the `gh` CLI also uses. With neither, it sends no credentials.
+- There is no flag for the token, because a flag shows up in `ps` and in shell history.
+- The token goes to `github.com` and `api.github.com` only, and never to another host:
+  - The ref lookup on `github.com` sends it as HTTP basic auth with the user `x-access-token`.
+  - The organization listing and the tarball download on `api.github.com` send `Authorization: Bearer <token>`.
+  - The github.com tarball route never gets it.
+  - A redirect to any other host, `codeload.github.com` included, drops the header.
+- If GitHub answers 401 to a request that carried the token, the token is invalid or expired. GitHub does this even for public repositories. The ref lookup, the listing and the download then fail with `GitHub rejected the token in GITHUB_TOKEN`, or `GH_TOKEN` when the token came from there.
+- The tool never prints the token in an error, a warning or a log.
 
 ### Scan scope
 

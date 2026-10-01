@@ -60,10 +60,11 @@ func useCache(t *testing.T) string {
 }
 
 // fakeRemote replaces ls-remote with refs (or err) and the archive host with handler.
-// The archive cache starts empty.
+// The archive cache starts empty, and GITHUB_TOKEN and GH_TOKEN are unset.
 func fakeRemote(t *testing.T, refs []*plumbing.Reference, err error, handler http.HandlerFunc) {
 	t.Helper()
 	useCache(t)
+	setTokens(t, "", "")
 	oldList, oldBase, oldClient := listRefs, archiveBase, httpClient
 	t.Cleanup(func() { listRefs, archiveBase, httpClient = oldList, oldBase, oldClient })
 	listRefs = func(context.Context, string) ([]*plumbing.Reference, error) { return refs, err }

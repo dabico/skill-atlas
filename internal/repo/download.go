@@ -24,8 +24,8 @@ import (
 
 // Tests replace these.
 var (
-	// archiveBase is where tarballs come from: <archiveBase>/<owner>/<repo>/archive/<sha>.tar.gz.
-	// GitHub redirects these to codeload.github.com.
+	// archiveBase is where tarballs come from without a token:
+	// <archiveBase>/<owner>/<repo>/archive/<sha>.tar.gz. GitHub redirects these to codeload.github.com.
 	archiveBase = "https://" + githubHost
 	httpClient  = http.DefaultClient
 	listRefs    = lsRemote
@@ -47,7 +47,8 @@ var ErrEmptyRepository = errors.New("empty")
 
 // Download resolves ref with ls-remote and extracts the tarball of that commit into dir.
 // An empty ref means the remote's default branch; otherwise ref is a branch or tag name.
-// It never prompts and sends no credentials.
+// It never prompts. If GITHUB_TOKEN or GH_TOKEN is set, the token goes to GitHub hosts only, so
+// private repositories the token can read work.
 //
 // Tarballs are kept between runs in the archive cache, keyed by commit SHA. A cached commit is
 // unpacked without a request to the archive host. When the cache can't be used, Download still
@@ -81,7 +82,7 @@ func Download(ctx context.Context, t Target, ref, dir string, warn func(error)) 
 
 func lsRemote(ctx context.Context, url string) ([]*plumbing.Reference, error) {
 	rem := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{Name: "origin", URLs: []string{url}})
-	return rem.ListContext(ctx, &git.ListOptions{PeelingOption: git.AppendPeeled})
+	return rem.ListContext(ctx, listOptions(url))
 }
 
 // resolve finds the short ref name and the commit SHA to download.
@@ -185,21 +186,29 @@ func (c ctxReader) Read(p []byte) (int, error) {
 
 // fetchArchive streams the tarball of commit sha into dir. Unless cache is "", the tarball is
 // also written to the cache once it has been extracted in full; a failure there goes to warn.
+//
+// With a token the tarball comes from the REST API, the only route that takes a token for a private
+// repository. Without one it comes from the github.com web route, which doesn't count against the
+// API rate limit. The token is never sent to the web route.
 func fetchArchive(ctx context.Context, t Target, sha, dir, cache string, warn func(error)) error {
-	url := archiveBase + "/" + t.Owner + "/" + t.Name + "/archive/" + sha + ".tar.gz"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := archiveRequest(ctx, t, sha)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", t.Display, err)
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := do(req)
 	if err != nil {
 		return mapError(ctx, t, err)
 	}
 	defer resp.Body.Close()
 
+	sent, name := sentToken(req)
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
 		return fmt.Errorf("repository %s not found", t.Display)
+	case resp.StatusCode == http.StatusUnauthorized && sent:
+		return errBadToken(name)
+	case rateLimited(resp):
+		return rateLimitError(resp.Header.Get("X-RateLimit-Reset"), sent)
 	case resp.StatusCode != http.StatusOK:
 		return fmt.Errorf("download %s: %s", t.Display, resp.Status)
 	}
@@ -229,6 +238,22 @@ func fetchArchive(ctx context.Context, t Target, sha, dir, cache string, warn fu
 		}
 	}
 	return nil
+}
+
+// archiveRequest builds the request for the tarball of commit sha. With a token it is
+// GET <apiBase>/repos/<owner>/<repo>/tarball/<sha>, which answers 302 to codeload.github.com with
+// a short-lived token in the URL. Without one it is <archiveBase>/<owner>/<repo>/archive/<sha>.tar.gz.
+func archiveRequest(ctx context.Context, t Target, sha string) (*http.Request, error) {
+	if tok, _ := token(); tok != "" {
+		return apiRequest(ctx, apiBase+"/repos/"+t.Owner+"/"+t.Name+"/tarball/"+sha)
+	}
+	url := archiveBase + "/" + t.Owner + "/" + t.Name + "/archive/" + sha + ".tar.gz"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	return req, nil
 }
 
 // cacheFile is a tarball on its way into the cache. It is written to a temporary file next to
@@ -380,6 +405,9 @@ func mapError(ctx context.Context, t Target, err error) error {
 	switch {
 	case ctx.Err() != nil:
 		return fmt.Errorf("download %s: %w", t.Display, ctx.Err())
+	case errors.Is(err, transport.ErrAuthenticationRequired) && sentListToken(t):
+		_, name := token()
+		return errBadToken(name)
 	case errors.Is(err, transport.ErrAuthenticationRequired), errors.Is(err, transport.ErrAuthorizationFailed):
 		return fmt.Errorf("authentication failed for %s: the repository may be private or may not exist", t.Display)
 	case errors.Is(err, transport.ErrRepositoryNotFound):

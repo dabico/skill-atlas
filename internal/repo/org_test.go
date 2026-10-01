@@ -12,8 +12,10 @@ import (
 )
 
 // fakeAPI replaces the GitHub API with handler and returns the server URL.
+// GITHUB_TOKEN and GH_TOKEN are unset.
 func fakeAPI(t *testing.T, handler http.HandlerFunc) string {
 	t.Helper()
+	setTokens(t, "", "")
 	oldBase, oldClient := apiBase, httpClient
 	t.Cleanup(func() { apiBase, httpClient = oldBase, oldClient })
 	srv := httptest.NewServer(handler)

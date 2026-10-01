@@ -77,6 +77,18 @@ These replace the cloning decisions above.
   - An unusable cache (no cache dir, mkdir, CreateTemp, write or rename fails) never fails the download. `skill-atlas: warning: archive cache unavailable: <err>` prints once per run.
   - Dirs 0700, files 0600. A hit touches the mtime. No eviction yet.
 
+## GitHub token (2026-10-01)
+
+Option C from the archive download decision, which the maintainer preferred.
+
+- The token comes from the environment only: `GITHUB_TOKEN`, then `GH_TOKEN` if the first is empty. There is no flag, because a flag leaks into `ps` and shell history. The design was given to the subagent by the main session; the maintainer wasn't asked about the flag.
+- It is sent only to `github.com` and `api.github.com` (`tokenHosts` in `internal/repo/auth.go`): basic auth with user `x-access-token` on ls-remote, `Authorization: Bearer` on API requests. `do()` strips the header on any redirect off `tokenHosts`, on top of Go's own cross-domain rule.
+- PR #12 review (jetbrains-air bot), approved by the maintainer: the github.com `/archive/<sha>.tar.gz` web route ignores a PAT and answers 404 for private repos. With a token the download uses `GET api.github.com/repos/<o>/<r>/tarball/<sha>` (302 to codeload with its own short-lived token; our header is dropped on that hop). Without a token it keeps the web route, so anonymous runs don't spend the 60/hour API quota. The token never goes to the web route. Each download with a token costs 1 API request; cache hits cost none.
+- Same review: a 401 to a request that carried the token returns `GitHub rejected the token in GITHUB_TOKEN` (or `GH_TOKEN`, the variable actually used), on ls-remote (`ErrAuthenticationRequired`), the listing and the download. GitHub answers 401 for a bad token even on public repos. Without a token the old errors stay.
+- The rate-limit error keeps its prefix and gains `; set GITHUB_TOKEN to raise the limit` when no token was sent.
+- Without access, a private repository still fails with `authentication failed for ...: the repository may be private or may not exist`.
+- This supersedes "no credentials" in the archive download and organization scan sections above.
+
 ## Multi-repo scan (PR #5)
 
 - `scan` takes several Git URLs. The ref only goes on the URL as `<url>#<ref>`. The `--ref` flag is gone.
