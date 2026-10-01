@@ -223,7 +223,7 @@ q.addEventListener = (ev, fn) => { if (ev === "input") onInput = fn; };
 const document = {
   activeElement: null,
   addEventListener() {},
-  getElementById: (id) => ({ filter: box, q, fcount: count, nomatch: none })[id],
+  getElementById: (id) => ({ filter: box, q, fcount: count, nomatch: none, sort: mk({ value: "asc" }) })[id],
   querySelectorAll: (sel) => ({ "[data-match]": items, "section[data-match]": items.filter((i) => i.tagName === "SECTION"), "[data-group]": groups })[sel],
 };
 vm.runInNewContext(spec.script, { document });

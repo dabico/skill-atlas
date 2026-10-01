@@ -8,12 +8,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"skill-atlas/internal/skill"
 )
 
 const (
@@ -233,6 +236,22 @@ func displayName(g goldenSkill) string {
 	return g.Dir
 }
 
+// nameOrder returns the golden skills in the order the TUI and the report list them: name A–Z.
+func nameOrder(skills []goldenSkill) []goldenSkill {
+	out := slices.Clone(skills)
+	slices.SortStableFunc(out, func(a, b goldenSkill) int {
+		return skill.Compare(skill.Skill{Path: a.Path, Dir: a.Dir, Name: a.Name}, skill.Skill{Path: b.Path, Dir: b.Dir, Name: b.Name})
+	})
+	return out
+}
+
+// sortedSkills returns skills in name order A–Z.
+func sortedSkills(skills []skill.Skill) []skill.Skill {
+	out := slices.Clone(skills)
+	slices.SortStableFunc(out, skill.Compare)
+	return out
+}
+
 // filterMatch mirrors the TUI filter: case-insensitive substring of name, description or path.
 func filterMatch(g goldenSkill, q string) bool {
 	q = strings.ToLower(q)
@@ -247,7 +266,7 @@ func filterMatch(g goldenSkill, q string) bool {
 func TestTUI(t *testing.T) {
 	t.Parallel()
 	f := ideavim
-	skills := readGolden(t, f.golden)
+	skills := nameOrder(readGolden(t, f.golden))
 	invalid := 0
 	for _, g := range skills {
 		if !g.Valid {
@@ -264,6 +283,9 @@ func TestTUI(t *testing.T) {
 	}
 	if !strings.Contains(rightPane(pane), skills[0].Path) {
 		t.Errorf("detail doesn't show first path %q:\n%s", skills[0].Path, pane)
+	}
+	if !strings.Contains(pane, "┌ Skills A–Z ─") {
+		t.Errorf("list title doesn't show the A–Z order:\n%s", pane)
 	}
 
 	// j moves the cursor and the detail pane follows.
@@ -324,11 +346,45 @@ func TestTUI(t *testing.T) {
 		time.Sleep(pollEvery)
 	}
 
+	checkSortToggle(t, s, skills)
+
 	s.keys("q")
 	if code := s.waitExit(shortWait); code != 0 {
 		t.Errorf("exit code = %d, want 0\n%s", code, s.last)
 	}
 	s.assertTmpClean()
+}
+
+// checkSortToggle presses s twice: the list turns Z–A and back, and the selected skill stays in the detail pane.
+func checkSortToggle(t *testing.T, s *session, skills []goldenSkill) {
+	t.Helper()
+	first, last := namePrefix(displayName(skills[0])), namePrefix(displayName(skills[len(skills)-1]))
+	selected := ""
+	for _, g := range skills {
+		if strings.Contains(rightPane(s.capture()), g.Path) {
+			selected = g.Path
+		}
+	}
+	if selected == "" {
+		t.Fatalf("detail pane shows no skill path:\n%s", s.last)
+	}
+
+	s.keys("s")
+	pane := s.waitFor(regexp.MustCompile(regexp.QuoteMeta("┌ Skills Z–A ─")), shortWait)
+	left := leftPane(pane)
+	if i, j := strings.Index(left, last), strings.Index(left, first); i < 0 || j < 0 || i > j {
+		t.Errorf("list isn't Z–A after s: %q should come before %q:\n%s", last, first, pane)
+	}
+	if !strings.Contains(rightPane(pane), selected) {
+		t.Errorf("selection changed after s, want %s in the detail pane:\n%s", selected, pane)
+	}
+
+	s.keys("s")
+	pane = s.waitFor(regexp.MustCompile(regexp.QuoteMeta("┌ Skills A–Z ─")), shortWait)
+	left = leftPane(pane)
+	if i, j := strings.Index(left, first), strings.Index(left, last); i < 0 || j < 0 || i > j {
+		t.Errorf("list isn't A–Z after s s:\n%s", pane)
+	}
 }
 
 func TestTUIErrors(t *testing.T) {
