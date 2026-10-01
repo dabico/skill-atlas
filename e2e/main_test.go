@@ -48,6 +48,18 @@ func run(m *testing.M) int {
 		return 1
 	}
 	defer os.RemoveAll(workDir)
+	// Keep the archive cache in the scratch root, for this process and the binaries it starts.
+	// os.UserCacheDir reads XDG_CACHE_HOME on Linux only. Playwright looks for its browsers
+	// under the same cache dir, so pin them to where they were installed first.
+	if os.Getenv("PLAYWRIGHT_BROWSERS_PATH") == "" {
+		if dir, err := os.UserCacheDir(); err == nil {
+			os.Setenv("PLAYWRIGHT_BROWSERS_PATH", filepath.Join(dir, "ms-playwright"))
+		}
+	}
+	if err := os.Setenv("XDG_CACHE_HOME", filepath.Join(workDir, "cache")); err != nil {
+		fmt.Fprintln(os.Stderr, "e2e:", err)
+		return 1
+	}
 
 	binPath = filepath.Join(workDir, "skill-atlas")
 	build := exec.Command("go", "build", "-o", binPath, "./cmd/skill-atlas")
@@ -153,7 +165,7 @@ func downloadScan(t testing.TB, url, ref string, opts scan.Options) scanned {
 		}
 		e.res.target = target
 		start := time.Now()
-		co, err := repo.Download(ctx, target, ref, dir)
+		co, err := repo.Download(ctx, target, ref, dir, nil)
 		e.res.downloadDur = time.Since(start)
 		if err != nil {
 			e.res.err = err

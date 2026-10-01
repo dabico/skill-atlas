@@ -36,7 +36,7 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
   Source: "Let's go with your recommendation"
 - The scanned commit SHA is always shown.
   Source: "let's show the SHA by default why not"
-- No state is stored. The clone goes to a temp dir that is deleted before exit. The one exception is the `--html` report file.
+- No state is stored. The clone goes to a temp dir that is deleted before exit. The one exception is the `--html` report file. Superseded on 2026-10-01 by the archive cache.
   Source: "I don't plan for the tool to store any state"
 - Symlinks are ignored. Submodules are skipped.
   Source: "Ignore symlinks", "Skip submodules for now"
@@ -51,6 +51,31 @@ These replace the cloning decisions above.
 - SSH URLs are still accepted but treated as their HTTPS form: ls-remote and the download go over HTTPS with no auth. The SSH agent and `known_hosts` code and the direct `skeema/knownhosts` dependency are gone. Private repos aren't supported in any URL form. Option A was treating SSH URLs as HTTPS and option C was `GITHUB_TOKEN` support. The maintainer prefers C; it is planned for a later PR.
   Source: "Let's go with A for now, but C would be preferred."
 - Unpacking writes only regular files and directories, strips the single top-level directory, skips symlinks and hard links, and fails on absolute paths or `..` escapes. A pax global `comment` (the commit SHA from git archive) that differs from the resolved SHA fails the download.
+
+## Organization scan (2026-10-01)
+
+- `scan https://github.com/<org>` lists the organization's repositories and scans each one at its default branch. Refs aren't supported on an org URL (usage error, exit 2). A repository URL whose owner is an org on the command line is dropped in favor of the org scan.
+  Source: "Implement support for organizations in GitHub. Submitting an organization URL downloads all skills from all repositories available to the requester. Refs should not be supported for this. If CLI has an org URL specified and a specific repository from that org is specified, then it's just ignored in favor of the org scan."
+- Defaults Claude picked, not asked:
+  - Org URLs are HTTPS only. `git@github.com:org` and `ssh://git@github.com/org` fail with a hint to use `https://github.com/<org>`.
+  - The listing uses `GET /orgs/<org>/repos` (type=all, sorted by full name), not `/users/<user>/repos`. A user account gets `github.com/<user> isn't a GitHub organization or doesn't exist`.
+  - Forks and archived repositories are included ("all repositories").
+  - Empty repositories (no commits) from a listing are left out silently. An empty repo given by its own URL still fails. An org with no repos, or only empty ones, fails with `no repositories found in github.com/<org>`.
+  - Covered repositories are dropped silently, with or without a ref, in any argument order, owner compared case-insensitively. The same org twice is a usage error.
+  - No credentials yet, so only public repositories are listed and the unauthenticated rate limit applies (60 requests per hour, 100 repos per request). "Available to the requester" needs `GITHUB_TOKEN`, the planned next PR.
+  - A failed listing becomes 1 failed result named `github.com/<org>`; the other URLs continue.
+
+## Archive cache (2026-10-01)
+
+- A review on PR #9 said every checkout stays on disk until the whole scan ends, so an org scan with hundreds of repositories can fill a small disk or tmpfs. The maintainer agreed and asked to keep the tarballs between runs. This replaces "no state is stored".
+  Source: "Regarding the review comment, it's valid. I'd personally keep archives between runs as "caches" and delete the extracted directories in between scans!"
+- `scanAll` deletes each repository's checkout as soon as its download and scan finish, worked or failed. At most `--parallel` checkouts are on disk; the temp root is still deleted at exit.
+- Defaults from the brief, not asked:
+  - Location `os.UserCacheDir()/skill-atlas/archives`, file `<sha>.tar.gz`. The SHA is the only key: the top-level directory, the only part that names the repository, is stripped, so forks at the same commit share 1 file.
+  - ls-remote always runs. A hit makes no archive request. A miss tees the body into `<sha>-*.tmp` in the cache dir and renames it once the extraction succeeded; any failure or cancellation removes the temp file.
+  - A cached file that fails to unpack (gzip, tar, SHA mismatch, path escape) is deleted, the checkout cleared and the commit downloaded once more. A cancelled unpack from the cache keeps the file.
+  - An unusable cache (no cache dir, mkdir, CreateTemp, write or rename fails) never fails the download. `skill-atlas: warning: archive cache unavailable: <err>` prints once per run.
+  - Dirs 0700, files 0600. A hit touches the mtime. No eviction yet.
 
 ## Multi-repo scan (PR #5)
 
@@ -133,3 +158,4 @@ These replace the cloning decisions above.
 | Any HTTPS or SSH host                                    | `github.com` only                                 | Tarball URLs are GitHub-specific (2026-10-01)                          |
 | Skills in path order                                     | Name A–Z by default, Z–A with `s` or the select   | "Let's go with A, sorting repositories first followed by individual skills after." (2026-10-01) |
 | Repositories in command-line order in the TUI/report     | Repositories by name, then skills in each         | Same quote (2026-10-01); stderr lines keep their order                 |
+| No state stored, tarball streamed only                   | Archive cache keyed by SHA, checkouts deleted per repository | "I'd personally keep archives between runs as "caches" and delete the extracted directories in between scans!" (2026-10-01) |

@@ -52,6 +52,33 @@ func TestParseURL(t *testing.T) {
 	}
 }
 
+func TestParseURLOrg(t *testing.T) {
+	org := func(url, owner string) Target {
+		return Target{URL: url, Display: "github.com/" + owner, Owner: owner, Org: true}
+	}
+	tests := []struct {
+		in   string
+		want Target
+	}{
+		{"https://github.com/JetBrains", org("https://github.com/JetBrains", "JetBrains")},
+		{"https://github.com/JetBrains/", org("https://github.com/JetBrains/", "JetBrains")},
+		{"  https://github.com/agentskills  ", org("https://github.com/agentskills", "agentskills")},
+		{"https://GitHub.com/my-org", org("https://GitHub.com/my-org", "my-org")},
+		{"https://github.com/org?tab=repositories", org("https://github.com/org?tab=repositories", "org")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, err := ParseURL(tt.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
 // The duplicate check compares Display, so every form of 1 repository must give the same one.
 func TestParseURLSameRepo(t *testing.T) {
 	forms := []string{
@@ -98,7 +125,14 @@ func TestParseURLErrors(t *testing.T) {
 		{"https://github.com", "no repository path"},
 		{"https://github.com/", "no repository path"},
 		{"ssh://git@github.com/.git", "no repository path"},
-		{"https://github.com/org", `repository path "org" isn't <owner>/<repo>`},
+		{"https://github.com/org.git", `path "org.git" isn't <owner>/<repo> or <org>`},
+		{"https://github.com/my%20org", `path "my org" isn't <owner>/<repo> or <org>`},
+		{"https://github.com/..", `isn't <owner>/<repo> or <org>`},
+		{"git@github.com:org", "SSH URLs can't name an organization, use https://github.com/org for an organization"},
+		{"git@github.com:org/", "use https://github.com/org for an organization"},
+		{"ssh://git@github.com/org", "use https://github.com/org for an organization"},
+		{"github.com:JetBrains", "use https://github.com/JetBrains for an organization"},
+		{"http://github.com/org", "only HTTPS and SSH"},
 		{"https://github.com/org/repo/tree/main", `repository path "org/repo/tree/main" isn't <owner>/<repo>`},
 		{"https://github.com/a/b/c.git", `repository path "a/b/c" isn't <owner>/<repo>`},
 		{"git@github.com:a/b/c.git", `repository path "a/b/c" isn't <owner>/<repo>`},

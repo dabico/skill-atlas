@@ -20,8 +20,8 @@ var (
 
 var errLocalPath = errors.New("local paths aren't supported, pass a remote Git URL")
 
-// ParseURL accepts a GitHub repository URL over HTTPS or SSH and rejects everything else.
-// SSH URLs are mapped to their HTTPS form.
+// ParseURL accepts a GitHub repository URL over HTTPS or SSH, or an organization URL over HTTPS
+// (https://github.com/<org>), and rejects everything else. SSH URLs are mapped to their HTTPS form.
 func ParseURL(raw string) (Target, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -60,28 +60,46 @@ func ParseURL(raw string) (Target, error) {
 	if i := strings.IndexAny(p, "?#"); i >= 0 {
 		p = p[:i]
 	}
-	p = strings.TrimSuffix(strings.Trim(p, "/"), ".git")
-	p = strings.Trim(p, "/")
+	full := strings.Trim(p, "/")
+	p = strings.Trim(strings.TrimSuffix(full, ".git"), "/")
 	if p == "" {
 		return Target{}, errors.New("repository URL has no repository path")
 	}
 	owner, name, ok := strings.Cut(p, "/")
-	if !ok || strings.Contains(name, "/") {
+	if !ok {
+		return parseOrg(raw, ep.Protocol, full)
+	}
+	if strings.Contains(name, "/") || !validPart(owner) || !validPart(name) {
 		return Target{}, fmt.Errorf("repository path %q isn't <owner>/<repo>", p)
 	}
-	for _, part := range []string{owner, name} {
-		if !pathPart.MatchString(part) || part == "." || part == ".." {
-			return Target{}, fmt.Errorf("repository path %q isn't <owner>/<repo>", p)
-		}
-	}
+	t := repoTarget(owner, name)
+	t.URL = raw
+	return t, nil
+}
 
+// parseOrg checks the path of a URL that names only an owner, e.g. https://github.com/org.
+func parseOrg(raw, protocol, owner string) (Target, error) {
+	if !validPart(owner) || strings.HasSuffix(owner, ".git") {
+		return Target{}, fmt.Errorf("path %q isn't <owner>/<repo> or <org>", owner)
+	}
+	if protocol != "https" {
+		return Target{}, fmt.Errorf("SSH URLs can't name an organization, use https://%s/%s for an organization", githubHost, owner)
+	}
+	return Target{URL: raw, Display: githubHost + "/" + owner, Owner: owner, Org: true}, nil
+}
+
+// repoTarget is the Target of github.com/<owner>/<name>, without URL.
+func repoTarget(owner, name string) Target {
 	return Target{
-		URL:     raw,
 		Remote:  "https://" + githubHost + "/" + owner + "/" + name + ".git",
 		Display: githubHost + "/" + owner + "/" + name,
 		Owner:   owner,
 		Name:    name,
-	}, nil
+	}
+}
+
+func validPart(s string) bool {
+	return pathPart.MatchString(s) && s != "." && s != ".."
 }
 
 func isLocalPath(s string) bool {

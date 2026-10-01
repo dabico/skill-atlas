@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -16,10 +18,11 @@ import (
 // defaultParallel is how many repositories are downloaded at once unless --parallel says otherwise.
 const defaultParallel = 4
 
-// source is one repository to scan; ref is empty for the remote's default branch.
+// source is one repository or organization to scan; ref is empty for the remote's default branch.
 type source struct {
 	target repo.Target
 	ref    string
+	org    *repo.Target // the organization the repository was listed from; nil when given directly
 }
 
 // scanned is the result for one source.
@@ -27,11 +30,13 @@ type scanned struct {
 	source
 	checkout repo.Checkout
 	res      scan.Result
-	err      error // why the download or scan failed; checkout and res may be empty
+	err      error // why the listing, download or scan failed; checkout and res may be empty
+	printed  bool  // err is already on stderr
 }
 
 type (
 	downloadFunc func(ctx context.Context, t repo.Target, ref, dir string) (repo.Checkout, error)
+	listFunc     func(ctx context.Context, org repo.Target) ([]repo.Target, error)
 	scanFunc     func(root, rootName string, opts scan.Options) (scan.Result, error)
 )
 
@@ -43,6 +48,11 @@ func (s scanned) shownRef() string {
 	return s.ref
 }
 
+// skipped reports an empty repository from an organization listing. It isn't shown at all.
+func (s scanned) skipped() bool {
+	return s.org != nil && errors.Is(s.err, repo.ErrEmptyRepository)
+}
+
 // label is "display[ @ ref]", the name of a repository in messages.
 func (s source) label() string {
 	if s.ref != "" {
@@ -52,8 +62,10 @@ func (s source) label() string {
 }
 
 // scanAll downloads and scans srcs, at most parallel at a time, each in its own subdirectory of root.
+// Each subdirectory is deleted once its repository is scanned or has failed.
 // A failing repository is recorded in its result and doesn't stop the others. With several
-// repositories each failure is printed to progress as it happens. Results keep the order of srcs.
+// repositories each failure is printed to progress as it happens, except for skipped ones.
+// Results keep the order of srcs.
 // The error is non-nil only when ctx is cancelled.
 func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts scan.Options, download downloadFunc, scanDir scanFunc, progress io.Writer) ([]scanned, error) {
 	out := make([]scanned, len(srcs))
@@ -89,12 +101,15 @@ func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts
 				out[i].checkout = checkout
 				out[i].res, err = scanDir(dir, s.target.Name, opts)
 			}
+			// The result is in memory. Deleting the checkout now keeps at most parallel of them on disk.
+			os.RemoveAll(dir)
 			if err != nil {
 				out[i].err = err
-				if len(srcs) > 1 && ctx.Err() == nil {
+				if len(srcs) > 1 && ctx.Err() == nil && !out[i].skipped() {
 					mu.Lock()
-					fmt.Fprintf(progress, "skill-atlas: %s: %s\n", s.label(), ansi.Strip(err.Error()))
+					printFailure(progress, out[i])
 					mu.Unlock()
+					out[i].printed = true
 				}
 			}
 		}()
@@ -104,4 +119,9 @@ func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts
 		return nil, err
 	}
 	return out, nil
+}
+
+// printFailure prints "skill-atlas: <label>: <error>" without escape sequences.
+func printFailure(w io.Writer, s scanned) {
+	fmt.Fprintf(w, "skill-atlas: %s: %s\n", s.label(), ansi.Strip(s.err.Error()))
 }

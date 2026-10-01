@@ -57,6 +57,12 @@ func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''
 // startScan runs "skill-atlas scan <args...>" in a 120x40 tmux pane.
 func startScan(t *testing.T, args ...string) *session {
 	t.Helper()
+	return startScanEnv(t, nil, args...)
+}
+
+// startScanEnv is startScan with extra NAME=value environment entries for the binary.
+func startScanEnv(t *testing.T, env []string, args ...string) *session {
+	t.Helper()
 	requireTmux(t)
 	s := &session{
 		t:      t,
@@ -71,8 +77,13 @@ func startScan(t *testing.T, args ...string) *session {
 		quoted[i] = shellQuote(a)
 	}
 	// "trap : INT" keeps the wrapper shell alive on Ctrl+C so the exit code is recorded.
-	script := fmt.Sprintf("trap : INT; TMPDIR=%s %s scan %s; echo $? > %s.tmp; mv %s.tmp %s; sleep 600",
-		shellQuote(s.tmpDir), shellQuote(binPath), strings.Join(quoted, " "),
+	vars := "TMPDIR=" + shellQuote(s.tmpDir)
+	for _, e := range env {
+		name, value, _ := strings.Cut(e, "=")
+		vars += " " + name + "=" + shellQuote(value)
+	}
+	script := fmt.Sprintf("trap : INT; %s %s scan %s; echo $? > %s.tmp; mv %s.tmp %s; sleep 600",
+		vars, shellQuote(binPath), strings.Join(quoted, " "),
 		shellQuote(s.exitFile), shellQuote(s.exitFile), shellQuote(s.exitFile))
 
 	cmd := exec.Command("tmux", "-S", s.sock, "-f", "/dev/null", "new-session", "-d",
@@ -415,7 +426,9 @@ func TestTUIErrors(t *testing.T) {
 
 func TestTUIInterrupt(t *testing.T) {
 	t.Parallel()
-	s := startScan(t, ideavim.url+"#"+ideavim.tag)
+	// An empty archive cache, so the tarball really downloads.
+	cache := mkdir(t, "cache-")
+	s := startScanEnv(t, []string{"XDG_CACHE_HOME=" + cache}, ideavim.url+"#"+ideavim.tag)
 	s.waitFor(regexp.MustCompile(regexp.QuoteMeta("Downloading "+ideavim.display+" @ "+ideavim.tag)), shortWait)
 	// The download takes a moment, so Ctrl+C sent right away lands mid-download.
 	s.keys("C-c")
@@ -423,4 +436,11 @@ func TestTUIInterrupt(t *testing.T) {
 		t.Errorf("exit code = %d, want 130\n%s", code, s.last)
 	}
 	s.assertTmpClean()
+	// The interrupted download leaves no partial tarball in the cache.
+	entries, _ := os.ReadDir(filepath.Join(cache, "skill-atlas", "archives"))
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("leftover temporary file %s in the archive cache", e.Name())
+		}
+	}
 }
