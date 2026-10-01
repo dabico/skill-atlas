@@ -56,7 +56,7 @@ type pageData struct {
 	Empty                    string // text for a scan with no skills
 	Skills                   []skillData
 	Groups                   []groupData // one per repository, when Multi
-	Script                   template.JS // the filter script, shown only when there are skills
+	Script                   template.JS // the filter and sort script, shown only when there are skills
 }
 
 // groupData is one repository on a page with several.
@@ -88,6 +88,7 @@ type field struct {
 }
 
 // Render returns the HTML page for r. Every value except the rendered Markdown goes through html/template escaping.
+// Repositories and the skills in each are in name order A–Z; the script reverses the page for Z–A.
 func Render(r Report) ([]byte, error) {
 	data := pageData{Multi: len(r.Repos) > 1}
 	shift := headingShift
@@ -99,11 +100,16 @@ func Render(r Report) ([]byte, error) {
 		data.ShortSHA = shortSHA(data.SHA)
 	}
 
+	repos := slices.Clone(r.Repos)
+	slices.SortStableFunc(repos, func(a, b Repo) int { return skill.CompareRepos(a.Name, a.Ref, b.Name, b.Ref) })
+
 	var total, invalidTotal, excludedTotal, failed int
-	for ri, repo := range r.Repos {
+	for ri, repo := range repos {
 		g := groupData{Name: repo.Name, Ref: repo.Ref, SHA: repo.SHA, ShortSHA: shortSHA(repo.SHA)}
 		invalid := 0
-		for i, s := range repo.Skills {
+		skills := slices.Clone(repo.Skills)
+		slices.SortStableFunc(skills, skill.Compare)
+		for i, s := range skills {
 			body, err := renderBody(s.Body, shift)
 			if err != nil {
 				return nil, fmt.Errorf("render %s: %w", s.Path, err)
@@ -148,8 +154,8 @@ func Render(r Report) ([]byte, error) {
 	if failed > 0 {
 		data.Summary += fmt.Sprintf(", %d failed", failed)
 	}
-	if !data.Multi && len(r.Repos) == 1 && r.Repos[0].Err != "" {
-		data.Empty = errorText(r.Repos[0].Err)
+	if !data.Multi && len(repos) == 1 && repos[0].Err != "" {
+		data.Empty = errorText(repos[0].Err)
 	}
 	if total > 0 {
 		data.Script = template.JS(filterScript)

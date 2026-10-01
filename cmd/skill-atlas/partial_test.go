@@ -67,8 +67,9 @@ func TestPartialFailureHTMLWritesReportAndExits1(t *testing.T) {
 			t.Errorf("report lacks %q", want)
 		}
 	}
-	if strings.Index(string(page), "github.com/o/good") > strings.Index(string(page), "github.com/o/bad") {
-		t.Error("repositories are not in command-line order")
+	// The page lists repositories by name, not in command-line order.
+	if strings.Index(string(page), "github.com/o/bad") > strings.Index(string(page), "github.com/o/good") {
+		t.Error("repositories are not in name order")
 	}
 	if len(*opened) != 1 {
 		t.Errorf("browser opened %d times, want 1", len(*opened))

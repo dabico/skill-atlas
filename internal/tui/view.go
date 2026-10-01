@@ -75,11 +75,11 @@ func (m *model) footer() string {
 	case m.filtering:
 		hint = "enter apply · esc clear"
 	case m.filter != "":
-		hint = "j/k move · tab focus · / filter · esc clear filter · q quit"
+		hint = "j/k move · tab focus · esc clear filter · s sort · q quit" // fits 60 columns
 	case m.focus == paneDetail:
-		hint = "j/k scroll · tab focus · / filter · q quit"
+		hint = "j/k scroll · tab focus · / filter · s sort · q quit"
 	default:
-		hint = "j/k move · tab focus · / filter · q quit"
+		hint = "j/k move · tab focus · / filter · s sort · q quit"
 	}
 	return dimStyle.Render(ansi.Truncate(" "+hint, m.width, "…"))
 }
@@ -91,6 +91,7 @@ func (m *model) panes() string {
 	if m.filter != "" {
 		listTitle = fmt.Sprintf("Skills %d/%d", len(m.visible), len(m.skills))
 	}
+	listTitle += " " + m.orderLabel()
 	var detailTitle string
 	if i := m.selected(); i >= 0 {
 		detailTitle = m.skills[i].DisplayName()
@@ -104,6 +105,14 @@ func (m *model) panes() string {
 		rows[i] = left[i] + right[i]
 	}
 	return strings.Join(rows, "\n")
+}
+
+// orderLabel names the list order for the list pane title.
+func (m *model) orderLabel() string {
+	if m.desc {
+		return "Z–A"
+	}
+	return "A–Z"
 }
 
 // listLines renders the list pane content: optional filter row, then skill rows.

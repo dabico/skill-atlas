@@ -130,7 +130,9 @@ nav ul { margin: 0; padding-left: 1.25rem; }
 .empty { padding: 24px 0; color: var(--muted); }
 [hidden] { display: none; }
 .filter { margin: 0 0 12px; }
-.filter input { width: 100%; max-width: 24rem; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+.filter input, .filter select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+.filter input { width: 100%; max-width: 24rem; }
+.filter select { margin-top: 6px; }
 .fcount { margin: 4px 0 0; color: var(--muted); font-size: 0.875rem; }
 {{- if .Multi}}
 .repohead { margin: 16px 0 4px; font-size: 1.25rem; line-height: 1.3; }
@@ -155,6 +157,10 @@ nav .repohead { font-size: 1rem; color: var(--fg); }
 {{- if .Script}}
 <div class="filter" id="filter" hidden>
 <input type="search" id="q" placeholder="Filter (press /)" aria-label="Filter skills" autocomplete="off">
+<select id="sort" aria-label="Sort skills" autocomplete="off">
+<option value="asc" selected>Name A–Z</option>
+<option value="desc">Name Z–A</option>
+</select>
 <p class="fcount" id="fcount" hidden></p>
 </div>
 <p class="empty" id="nomatch" hidden>No matching skills</p>
@@ -189,6 +195,10 @@ nav .repohead { font-size: 1rem; color: var(--fg); }
 <h2>Contents</h2>
 <div class="filter" id="filter" hidden>
 <input type="search" id="q" placeholder="Filter (press /)" aria-label="Filter skills" autocomplete="off">
+<select id="sort" aria-label="Sort skills" autocomplete="off">
+<option value="asc" selected>Name A–Z</option>
+<option value="desc">Name Z–A</option>
+</select>
 <p class="fcount" id="fcount" hidden></p>
 </div>
 <p class="empty" id="nomatch" hidden>No matching skills</p>

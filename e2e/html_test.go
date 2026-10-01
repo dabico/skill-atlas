@@ -134,8 +134,46 @@ func TestHTMLReport(t *testing.T) {
 	if n := strings.Count(html, "<section "); n != len(skills) {
 		t.Errorf("report has %d skill sections, want %d", n, len(skills))
 	}
+	// Sections are in name order A–Z and numbered in that order.
+	for i, g := range nameOrder(skills) {
+		id := fmt.Sprintf("skill-%d", i+1)
+		if sec := sectionText(html, id); !strings.Contains(sec, "<code>"+g.Path+"</code>") {
+			t.Errorf("section %s isn't %s", id, g.Path)
+		}
+	}
+	checkSortSelect(t, html)
 	checkScriptPinned(t, html)
 	assertOnlyReport(t, r.tmpDir, path)
+}
+
+// sectionText returns the markup of the skill section with the given id, or "".
+func sectionText(page, id string) string {
+	_, after, ok := strings.Cut(page, `<section class="skill" id="`+id+`"`)
+	if !ok {
+		return ""
+	}
+	sec, _, _ := strings.Cut(after, "</section>")
+	return sec
+}
+
+// checkSortSelect asserts the page has the sort select inside the filter box, with A–Z selected.
+func checkSortSelect(t *testing.T, page string) {
+	t.Helper()
+	const sel = `<select id="sort" aria-label="Sort skills" autocomplete="off">
+<option value="asc" selected>Name A–Z</option>
+<option value="desc">Name Z–A</option>
+</select>`
+	if n := strings.Count(page, "<select"); n != 1 {
+		t.Errorf("report has %d select elements, want 1", n)
+	}
+	_, box, ok := strings.Cut(page, `<div class="filter" id="filter" hidden>`)
+	if !ok {
+		t.Fatal("report has no hidden filter box")
+	}
+	box, _, _ = strings.Cut(box, "</div>")
+	if !strings.Contains(box, sel) {
+		t.Errorf("filter box lacks the sort select %s:\n%s", sel, box)
+	}
 }
 
 var scriptRE = regexp.MustCompile(`(?s)<script>(.*?)</script>`)

@@ -47,8 +47,9 @@ func multiTotals(t *testing.T) (skills, invalid int) {
 
 func TestTUIMultiRepo(t *testing.T) {
 	t.Parallel()
-	golden := readGolden(t, ideavim.golden)
-	zoom := downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills
+	// ideavim sorts before zcaceres, so it is the first group; each group is in name order A–Z.
+	golden := nameOrder(readGolden(t, ideavim.golden))
+	zoom := sortedSkills(downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills)
 	total, invalid := multiTotals(t)
 	s := startScan(t, multiArgs()...)
 
@@ -87,6 +88,15 @@ func TestTUIMultiRepo(t *testing.T) {
 	s.waitUntil("detail shows the last ideavim skill", shortWait, func(p string) bool {
 		return strings.Contains(rightPane(p), ideavimLabel()) && strings.Contains(rightPane(p), last)
 	})
+
+	// s turns the list Z–A: zcaceres comes first now, and g selects its last skill A–Z.
+	s.keys("s", "g")
+	pane = s.waitUntil("Z–A list starts with the last zoom skill", shortWait, func(p string) bool {
+		return strings.Contains(p, "┌ Skills Z–A ─") && strings.Contains(rightPane(p), zoom[len(zoom)-1].Path)
+	})
+	if i, j := strings.Index(leftPane(pane), zoomDisplay), strings.Index(leftPane(pane), ideavim.display); i < 0 || (j >= 0 && j < i) {
+		t.Errorf("zcaceres group isn't first after s:\n%s", pane)
+	}
 
 	s.keys("q")
 	if code := s.waitExit(shortWait); code != 0 {
@@ -130,7 +140,7 @@ func TestTUIPartialFailure(t *testing.T) {
 
 	// G can't reach the failed repository's rows: the last skill of ideavim stays selected.
 	s.keys("G")
-	golden := readGolden(t, ideavim.golden)
+	golden := nameOrder(readGolden(t, ideavim.golden))
 	s.waitFor(regexp.MustCompile(regexp.QuoteMeta(golden[len(golden)-1].Path)), shortWait)
 
 	s.keys("q")
@@ -199,7 +209,7 @@ func TestHTMLAllReposFail(t *testing.T) {
 func TestHTMLMultiRepo(t *testing.T) {
 	t.Parallel()
 	golden := readGolden(t, ideavim.golden)
-	zoom := downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills
+	zoom := sortedSkills(downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{}).skills)
 	total, invalid := multiTotals(t)
 
 	r := runHTML(t, requireTool(t, "true"), nil, multiArgs()...)
@@ -229,9 +239,14 @@ func TestHTMLMultiRepo(t *testing.T) {
 	if strings.Contains(page, `id="skill-1"`) {
 		t.Error("multi-repo report uses single-repo ids")
 	}
+	// Repositories and skills are in name order A–Z: zcaceres is repo 2, and its first section is its first skill by name.
+	if sec := sectionText(page, "repo-2-skill-1"); !strings.Contains(sec, "<code>"+zoom[0].Path+"</code>") {
+		t.Errorf("section repo-2-skill-1 isn't %s", zoom[0].Path)
+	}
 	if n := strings.Count(page, "<section "); n != total {
 		t.Errorf("report has %d skill sections, want %d", n, total)
 	}
+	checkSortSelect(t, page)
 	checkScriptPinned(t, page)
 	assertOnlyReport(t, r.tmpDir, path)
 }

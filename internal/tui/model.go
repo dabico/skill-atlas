@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
@@ -39,9 +40,11 @@ type listRow struct {
 
 type model struct {
 	report  Report
-	skills  []skill.Skill // every repository's skills, in order
+	skills  []skill.Skill // every repository's skills, grouped by repository, in name order A–Z
 	repoOf  []int         // repository index of each entry in skills
+	repos   []int         // repository indices in name order A–Z
 	multi   bool          // 2 or more repositories
+	desc    bool          // list Z–A: the A–Z order of skills and repositories reversed
 	invalid int
 	failed  int // repositories that failed
 
@@ -70,11 +73,21 @@ func newModel(r Report) *model {
 		dark:   true,
 	}
 	m.multi = len(r.Repos) > 1
-	for i, repo := range r.Repos {
+	m.repos = make([]int, len(r.Repos))
+	for i := range m.repos {
+		m.repos[i] = i
+	}
+	slices.SortStableFunc(m.repos, func(a, b int) int {
+		return skill.CompareRepos(r.Repos[a].Name, r.Repos[a].Ref, r.Repos[b].Name, r.Repos[b].Ref)
+	})
+	for _, i := range m.repos {
+		repo := r.Repos[i]
 		if repo.Err != "" {
 			m.failed++
 		}
-		for _, s := range repo.Skills {
+		skills := slices.Clone(repo.Skills)
+		slices.SortStableFunc(skills, skill.Compare)
+		for _, s := range skills {
 			m.skills = append(m.skills, s)
 			m.repoOf = append(m.repoOf, i)
 			if !s.Valid() {
@@ -130,6 +143,10 @@ func (m *model) updateNavKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.filter != "" {
 			m.clearFilter()
 		}
+		return nil
+	case "s":
+		m.desc = !m.desc
+		m.applyFilter()
 		return nil
 	}
 	if m.focus == paneList {
@@ -215,7 +232,7 @@ func (m *model) selected() int {
 	return m.visible[m.cursor]
 }
 
-// applyFilter recomputes visible, keeping the current skill selected when it still matches.
+// applyFilter recomputes visible in the current order, keeping the current skill selected when it still matches.
 func (m *model) applyFilter() {
 	prev := m.selected()
 	q := strings.ToLower(m.filter)
@@ -224,6 +241,9 @@ func (m *model) applyFilter() {
 		if q == "" || m.matches(i, s, q) {
 			m.visible = append(m.visible, i)
 		}
+	}
+	if m.desc {
+		slices.Reverse(m.visible)
 	}
 	m.cursor = 0
 	for i, idx := range m.visible {
@@ -262,8 +282,13 @@ func (m *model) buildRows() {
 		}
 		return
 	}
+	repos := slices.Clone(m.repos)
+	if m.desc {
+		slices.Reverse(repos)
+	}
 	pos := 0
-	for r, repo := range m.report.Repos {
+	for _, r := range repos {
+		repo := m.report.Repos[r]
 		start := pos
 		for pos < len(m.visible) && m.repoOf[m.visible[pos]] == r {
 			pos++
