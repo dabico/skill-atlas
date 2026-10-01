@@ -41,6 +41,17 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
 - Symlinks are ignored. Submodules are skipped.
   Source: "Ignore symlinks", "Skip submodules for now"
 
+## Archive download (2026-10-01)
+
+These replace the cloning decisions above.
+
+- No clone. The tool resolves the ref with go-git's ls-remote over HTTPS, then downloads `https://github.com/<owner>/<repo>/archive/<sha>.tar.gz` (GitHub redirects to codeload.github.com) and unpacks it while it streams. Ref rules stay: no ref is the default branch from the HEAD symref, `#<ref>` tries branch then tag, commit SHAs aren't supported. Annotated tags use the peeled `refs/tags/x^{}` entry, so the SHA is still the commit.
+  Source: "Let's go with option A and narrow support to GitHub for now."
+- Only `github.com` is supported (host compared case-insensitively). The path must be `<owner>/<repo>`. Other hosts fail in `ParseURL` with `unsupported host "gitlab.com", only github.com is supported`.
+- SSH URLs are still accepted but treated as their HTTPS form: ls-remote and the download go over HTTPS with no auth. The SSH agent and `known_hosts` code and the direct `skeema/knownhosts` dependency are gone. Private repos aren't supported in any URL form. Option A was treating SSH URLs as HTTPS and option C was `GITHUB_TOKEN` support. The maintainer prefers C; it is planned for a later PR.
+  Source: "Let's go with A for now, but C would be preferred."
+- Unpacking writes only regular files and directories, strips the single top-level directory, skips symlinks and hard links, and fails on absolute paths or `..` escapes. A pax global `comment` (the commit SHA from git archive) that differs from the resolved SHA fails the download.
+
 ## Multi-repo scan (PR #5)
 
 - `scan` takes several Git URLs. The ref only goes on the URL as `<url>#<ref>`. The `--ref` flag is gone.
@@ -79,7 +90,7 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
 
 ## Testing and CI
 
-- CI runs on GitHub Actions in `dabico/skill-atlas` (private). Jobs: Lint, Vulnerability scan (skipped on PRs), Test on ubuntu and macOS, Network clone tests, E2E (tmux). Actions are pinned to commit SHAs. Dependabot opens weekly grouped updates.
+- CI runs on GitHub Actions in `dabico/skill-atlas` (private). Jobs: Lint, Vulnerability scan (skipped on PRs), Test on ubuntu and macOS, Network clone tests (renamed Network download tests on 2026-10-01), E2E (tmux). Actions are pinned to commit SHAs. Dependabot opens weekly grouped updates.
 - The E2E baseline is JetBrains/ideavim at tag `2.47.1` (commit `c1ae565`), checked against a golden file.
   Source: "Let's instead use JetBrains/ideavim as a baseline and not these other repositories."
 - Other pinned fixtures, each added for 1 feature:
@@ -107,3 +118,6 @@ All decisions below were made on 2026-09-30 unless noted. Quotes are the maintai
 | Fail-fast: 1 bad repo fails the whole multi-repo scan    | Partial results, exit 1                           | Maintainer's review of PR #5; fail-fast may return as a flag           |
 | Parallel clone limit fixed at 4 (`maxClones`)            | `--parallel N`, default 4                         | Maintainer's review of PR #5                                           |
 | `README.md` and `memory/` left out of feature PRs        | Memory goes in the feature PR (`AGENTS.md`)       | Maintainer's call on PR #5; README still only when asked               |
+| go-git shallow clone                                     | go-git ls-remote, then the GitHub tarball of the commit | "Let's go with option A and narrow support to GitHub for now." (2026-10-01) |
+| SSH agent auth with `~/.ssh/known_hosts`                 | SSH URLs treated as HTTPS, no auth                | "Let's go with A for now, but C would be preferred." (2026-10-01)      |
+| Any HTTPS or SSH host                                    | `github.com` only                                 | Tarball URLs are GitHub-specific (2026-10-01)                          |
