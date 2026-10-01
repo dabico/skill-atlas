@@ -18,7 +18,7 @@ import (
 func fakeDeps(bad ...string) (deps, *[]string) {
 	var opened []string
 	d := deps{
-		download: func(_ context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
+		download: func(_ context.Context, tg repo.Target, _, _ string, _ func(error)) (repo.Checkout, error) {
 			for _, b := range bad {
 				if tg.Name == b {
 					return repo.Checkout{}, errors.New("authentication failed for " + tg.Display)
@@ -107,5 +107,25 @@ func TestSingleRepoFailureMessageUnchanged(t *testing.T) {
 	code := runWith(d, []string{"scan", "--html", "https://github.com/o/only.git#v1"}, &bytes.Buffer{}, &errb)
 	if want := "skill-atlas: authentication failed for github.com/o/only\n"; code != exitFail || strings.Contains(errb.String(), "@ v1:") || !strings.Contains(errb.String(), want) {
 		t.Errorf("exit %d, stderr %q; want %q with no repository prefix", code, errb.String(), want)
+	}
+}
+
+// An unusable archive cache is reported once per run, however many repositories warn.
+func TestCacheWarningOnce(t *testing.T) {
+	useTempDir(t)
+	d, _ := fakeDeps()
+	download := d.download
+	d.download = func(ctx context.Context, tg repo.Target, ref, dir string, warn func(error)) (repo.Checkout, error) {
+		warn(errors.New("mkdir /nope: read-only file system"))
+		return download(ctx, tg, ref, dir, warn)
+	}
+	var errb bytes.Buffer
+	code := runWith(d, []string{"scan", "--html", "https://github.com/o/a", "https://github.com/o/b", "https://github.com/o/c"}, &bytes.Buffer{}, &errb)
+	if code != exitOK {
+		t.Fatalf("exit = %d, want %d; stderr %q", code, exitOK, errb.String())
+	}
+	const want = "skill-atlas: warning: archive cache unavailable: mkdir /nope: read-only file system\n"
+	if n := strings.Count(errb.String(), want); n != 1 {
+		t.Errorf("stderr has the warning %d times, want 1:\n%s", n, errb.String())
 	}
 }

@@ -1,5 +1,5 @@
 // Package repo validates GitHub repository and organization URLs, lists the repositories of an
-// organization and downloads the tarball of 1 commit.
+// organization and downloads the tarball of 1 commit, keeping it in the archive cache.
 package repo
 
 // Target is a validated GitHub repository or organization URL.

@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -28,7 +29,18 @@ var (
 	archiveBase = "https://" + githubHost
 	httpClient  = http.DefaultClient
 	listRefs    = lsRemote
+	// cacheDir returns the archive cache directory, which holds <sha>.tar.gz files.
+	cacheDir = userCacheDir
 )
+
+// userCacheDir is skill-atlas/archives in the user's cache directory, e.g. ~/.cache on Linux.
+func userCacheDir() (string, error) {
+	d, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "skill-atlas", "archives"), nil
+}
 
 // ErrEmptyRepository is wrapped by the Download error for a repository without commits.
 var ErrEmptyRepository = errors.New("empty")
@@ -36,12 +48,32 @@ var ErrEmptyRepository = errors.New("empty")
 // Download resolves ref with ls-remote and extracts the tarball of that commit into dir.
 // An empty ref means the remote's default branch; otherwise ref is a branch or tag name.
 // It never prompts and sends no credentials.
-func Download(ctx context.Context, t Target, ref, dir string) (Checkout, error) {
+//
+// Tarballs are kept between runs in the archive cache, keyed by commit SHA. A cached commit is
+// unpacked without a request to the archive host. When the cache can't be used, Download still
+// streams the tarball and calls warn, if it isn't nil, with the reason.
+func Download(ctx context.Context, t Target, ref, dir string, warn func(error)) (Checkout, error) {
 	co, err := resolve(ctx, t, ref)
 	if err != nil {
 		return Checkout{}, err
 	}
-	if err := fetchArchive(ctx, t, co.SHA, dir); err != nil {
+	if warn == nil {
+		warn = func(error) {}
+	}
+	cache, err := openCache()
+	if err != nil {
+		warn(err)
+	}
+	if cache != "" {
+		hit, err := unpackCached(ctx, filepath.Join(cache, co.SHA+".tar.gz"), co.SHA, dir)
+		if err != nil {
+			return Checkout{}, fmt.Errorf("download %s: %w", t.Display, err)
+		}
+		if hit {
+			return co, nil
+		}
+	}
+	if err := fetchArchive(ctx, t, co.SHA, dir, cache, warn); err != nil {
 		return Checkout{}, err
 	}
 	return co, nil
@@ -101,8 +133,59 @@ func resolve(ctx context.Context, t Target, ref string) (Checkout, error) {
 	return Checkout{}, fmt.Errorf("ref %q not found in %s", ref, t.Display)
 }
 
-// fetchArchive streams the tarball of commit sha into dir.
-func fetchArchive(ctx context.Context, t Target, sha, dir string) error {
+// openCache creates the archive cache directory and returns its path.
+func openCache() (string, error) {
+	d, err := cacheDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(d, 0o700); err != nil {
+		return "", err
+	}
+	return d, nil
+}
+
+// unpackCached extracts the cached tarball at file into dir and reports whether it was there.
+// A cached tarball that fails to extract is deleted and dir is cleared, so the caller downloads
+// the commit again. The error is non-nil only when ctx is cancelled or dir can't be cleared.
+func unpackCached(ctx context.Context, file, sha, dir string) (bool, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return false, nil // not cached; a file that can't be read is replaced by the download
+	}
+	defer f.Close()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return false, err
+	}
+	err = extract(ctxReader{ctx, f}, dir, sha)
+	if err == nil {
+		now := time.Now()
+		os.Chtimes(file, now, now) // the last use, for a future eviction
+		return true, nil
+	}
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	os.Remove(file)
+	return false, os.RemoveAll(dir)
+}
+
+// ctxReader stops reading once ctx is cancelled.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
+}
+
+// fetchArchive streams the tarball of commit sha into dir. Unless cache is "", the tarball is
+// also written to the cache once it has been extracted in full; a failure there goes to warn.
+func fetchArchive(ctx context.Context, t Target, sha, dir, cache string, warn func(error)) error {
 	url := archiveBase + "/" + t.Owner + "/" + t.Name + "/archive/" + sha + ".tar.gz"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -124,13 +207,79 @@ func fetchArchive(ctx context.Context, t Target, sha, dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("download %s: %w", t.Display, err)
 	}
-	if err := extract(resp.Body, dir, sha); err != nil {
+	var body io.Reader = resp.Body
+	var keep *cacheFile
+	if cache != "" {
+		if keep, err = newCacheFile(cache, sha); err != nil {
+			warn(err)
+		} else {
+			defer keep.discard()
+			body = io.TeeReader(resp.Body, keep)
+		}
+	}
+	if err := extract(body, dir, sha); err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("download %s: %w", t.Display, ctx.Err())
 		}
 		return fmt.Errorf("download %s: %w", t.Display, err)
 	}
+	if keep != nil {
+		if err := keep.commit(); err != nil {
+			warn(err)
+		}
+	}
 	return nil
+}
+
+// cacheFile is a tarball on its way into the cache. It is written to a temporary file next to
+// its final name and renamed once complete, so readers never see a partial tarball.
+// A failed write doesn't fail the download; commit returns the error instead.
+type cacheFile struct {
+	f    *os.File // nil after commit or discard
+	name string   // <cache>/<sha>.tar.gz
+	err  error    // the first write error
+}
+
+func newCacheFile(cache, sha string) (*cacheFile, error) {
+	f, err := os.CreateTemp(cache, sha+"-*.tmp") // mode 0600
+	if err != nil {
+		return nil, err
+	}
+	return &cacheFile{f: f, name: filepath.Join(cache, sha+".tar.gz")}, nil
+}
+
+// Write always succeeds, so a full disk in the cache doesn't stop the extraction.
+func (c *cacheFile) Write(p []byte) (int, error) {
+	if c.err == nil {
+		_, c.err = c.f.Write(p)
+	}
+	return len(p), nil
+}
+
+// commit moves the complete tarball to its final name. On error the temporary file is removed.
+func (c *cacheFile) commit() error {
+	f := c.f
+	c.f = nil
+	err := c.err
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), c.name)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
+}
+
+// discard removes the temporary file unless commit ran.
+func (c *cacheFile) discard() {
+	if c.f != nil {
+		c.f.Close()
+		os.Remove(c.f.Name())
+		c.f = nil
+	}
 }
 
 // extract writes the regular files and directories of a .tar.gz stream into dir, without the

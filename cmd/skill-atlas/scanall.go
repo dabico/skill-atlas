@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -61,6 +62,7 @@ func (s source) label() string {
 }
 
 // scanAll downloads and scans srcs, at most parallel at a time, each in its own subdirectory of root.
+// Each subdirectory is deleted once its repository is scanned or has failed.
 // A failing repository is recorded in its result and doesn't stop the others. With several
 // repositories each failure is printed to progress as it happens, except for skipped ones.
 // Results keep the order of srcs.
@@ -99,6 +101,8 @@ func scanAll(ctx context.Context, srcs []source, root string, parallel int, opts
 				out[i].checkout = checkout
 				out[i].res, err = scanDir(dir, s.target.Name, opts)
 			}
+			// The result is in memory. Deleting the checkout now keeps at most parallel of them on disk.
+			os.RemoveAll(dir)
 			if err != nil {
 				out[i].err = err
 				if len(srcs) > 1 && ctx.Err() == nil && !out[i].skipped() {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"golang.org/x/term"
@@ -30,7 +31,8 @@ func main() {
 
 // deps are the parts of a scan that tests replace.
 type deps struct {
-	download downloadFunc
+	// download is repo.Download. warn hears why the archive cache can't be used.
+	download func(ctx context.Context, t repo.Target, ref, dir string, warn func(error)) (repo.Checkout, error)
 	listOrg  listFunc
 	scanDir  scanFunc
 	open     func(url string) error
@@ -96,6 +98,16 @@ func runScan(d deps, cmd command, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Downloads run at the same time and warn as they go; 1 warning per run is enough.
+	stderr = &lockedWriter{w: stderr}
+	var warnOnce sync.Once
+	warn := func(err error) {
+		warnOnce.Do(func() { fmt.Fprintf(stderr, "skill-atlas: warning: archive cache unavailable: %v\n", err) })
+	}
+	download := func(ctx context.Context, t repo.Target, ref, dir string) (repo.Checkout, error) {
+		return d.download(ctx, t, ref, dir, warn)
+	}
+
 	entries, err := expandOrgs(ctx, srcs, d.listOrg, stderr)
 	if err != nil {
 		return failure(stderr, err)
@@ -109,7 +121,7 @@ func runScan(d deps, cmd command, stderr io.Writer) int {
 			at = append(at, i)
 		}
 	}
-	done, err := scanAll(ctx, todo, dir, cmd.parallel, scan.Options{Exclude: cmd.exclude}, d.download, d.scanDir, stderr)
+	done, err := scanAll(ctx, todo, dir, cmd.parallel, scan.Options{Exclude: cmd.exclude}, download, d.scanDir, stderr)
 	if err != nil {
 		return failure(stderr, err)
 	}
@@ -187,6 +199,18 @@ func duplicate(srcs []source) string {
 }
 
 type dupKey struct{ display, ref string }
+
+// lockedWriter serializes writes from concurrent downloads.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
 
 func failure(stderr io.Writer, err error) int {
 	if errors.Is(err, context.Canceled) {

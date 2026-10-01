@@ -49,9 +49,21 @@ func testRefs() []*plumbing.Reference {
 	}
 }
 
+// useCache points the archive cache at a new empty directory and returns it.
+func useCache(t *testing.T) string {
+	t.Helper()
+	old := cacheDir
+	t.Cleanup(func() { cacheDir = old })
+	dir := filepath.Join(t.TempDir(), "skill-atlas", "archives")
+	cacheDir = func() (string, error) { return dir, nil }
+	return dir
+}
+
 // fakeRemote replaces ls-remote with refs (or err) and the archive host with handler.
+// The archive cache starts empty.
 func fakeRemote(t *testing.T, refs []*plumbing.Reference, err error, handler http.HandlerFunc) {
 	t.Helper()
+	useCache(t)
 	oldList, oldBase, oldClient := listRefs, archiveBase, httpClient
 	t.Cleanup(func() { listRefs, archiveBase, httpClient = oldList, oldBase, oldClient })
 	listRefs = func(context.Context, string) ([]*plumbing.Reference, error) { return refs, err }
@@ -159,7 +171,7 @@ func TestDownloadExtracts(t *testing.T) {
 	fakeRemote(t, testRefs(), nil, serve(data, &paths))
 
 	dir := filepath.Join(t.TempDir(), "repo-0") // Download creates it
-	co, err := Download(context.Background(), testTarget(t), "", dir)
+	co, err := Download(context.Background(), testTarget(t), "", dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +198,7 @@ func TestDownloadWithoutComment(t *testing.T) {
 	data := tarGz(t, "", entry{name: testPrefix + "a.txt", typeflag: tar.TypeReg, body: "a"})
 	fakeRemote(t, testRefs(), nil, serve(data, nil))
 	dir := t.TempDir()
-	if _, err := Download(context.Background(), testTarget(t), "", dir); err != nil {
+	if _, err := Download(context.Background(), testTarget(t), "", dir, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := dirTree(t, dir); len(got) != 1 || got[0] != "a.txt" {
@@ -230,7 +242,7 @@ func TestDownloadRejectsBadArchives(t *testing.T) {
 			root := t.TempDir()
 			dir := filepath.Join(root, "out")
 			fakeRemote(t, testRefs(), nil, serve(tt.data(t, root), nil))
-			_, err := Download(context.Background(), testTarget(t), "", dir)
+			_, err := Download(context.Background(), testTarget(t), "", dir, nil)
 			if err == nil {
 				t.Fatal("expected error")
 			}
@@ -256,7 +268,7 @@ func TestDownloadStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(fmt.Sprint(tt.code), func(t *testing.T) {
 			fakeRemote(t, testRefs(), nil, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(tt.code) })
-			_, err := Download(context.Background(), testTarget(t), "", t.TempDir())
+			_, err := Download(context.Background(), testTarget(t), "", t.TempDir(), nil)
 			if err == nil || err.Error() != tt.want {
 				t.Errorf("error %v, want %q", err, tt.want)
 			}
@@ -273,7 +285,7 @@ func TestDownloadFollowsRedirect(t *testing.T) {
 	mux.HandleFunc("/codeload/", serve(data, nil))
 	fakeRemote(t, testRefs(), nil, mux.ServeHTTP)
 	dir := t.TempDir()
-	if _, err := Download(context.Background(), testTarget(t), "", dir); err != nil {
+	if _, err := Download(context.Background(), testTarget(t), "", dir, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "a")); err != nil {
@@ -284,7 +296,7 @@ func TestDownloadFollowsRedirect(t *testing.T) {
 func TestDownloadUnreachable(t *testing.T) {
 	fakeRemote(t, testRefs(), nil, nil)
 	archiveBase = "http://127.0.0.1:1" // refused at once
-	_, err := Download(context.Background(), testTarget(t), "", t.TempDir())
+	_, err := Download(context.Background(), testTarget(t), "", t.TempDir(), nil)
 	if err == nil || !strings.HasPrefix(err.Error(), "can't reach github.com: ") {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -294,7 +306,7 @@ func TestDownloadCanceled(t *testing.T) {
 	fakeRemote(t, testRefs(), nil, serve(nil, nil))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Download(ctx, testTarget(t), "", t.TempDir())
+	_, err := Download(ctx, testTarget(t), "", t.TempDir(), nil)
 	if !errors.Is(err, context.Canceled) || err.Error() != "download github.com/org/repo: context canceled" {
 		t.Errorf("got %v, want download github.com/org/repo: context canceled", err)
 	}
@@ -311,7 +323,7 @@ func TestDownloadCanceledMidStream(t *testing.T) {
 		cancel()
 		<-r.Context().Done()
 	})
-	_, err := Download(ctx, testTarget(t), "", t.TempDir())
+	_, err := Download(ctx, testTarget(t), "", t.TempDir(), nil)
 	if !errors.Is(err, context.Canceled) || err.Error() != "download github.com/org/repo: context canceled" {
 		t.Errorf("got %v, want download github.com/org/repo: context canceled", err)
 	}
@@ -370,7 +382,7 @@ func TestResolve(t *testing.T) {
 func TestDownloadStopsWhenResolveFails(t *testing.T) {
 	var paths []string
 	fakeRemote(t, testRefs(), nil, serve(nil, &paths))
-	if _, err := Download(context.Background(), testTarget(t), "nope", t.TempDir()); err == nil {
+	if _, err := Download(context.Background(), testTarget(t), "nope", t.TempDir(), nil); err == nil {
 		t.Fatal("expected error")
 	}
 	if len(paths) != 0 {

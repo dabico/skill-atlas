@@ -25,14 +25,14 @@ func orgDeps(t *testing.T, orgs map[string][]string, bad ...string) (deps, *[]st
 		downloaded []string
 	)
 	download := d.download
-	d.download = func(ctx context.Context, tg repo.Target, ref, dir string) (repo.Checkout, error) {
+	d.download = func(ctx context.Context, tg repo.Target, ref, dir string, warn func(error)) (repo.Checkout, error) {
 		mu.Lock()
 		downloaded = append(downloaded, tg.Display)
 		mu.Unlock()
 		if strings.HasPrefix(tg.Name, "empty") {
 			return repo.Checkout{}, fmt.Errorf("repository %s is %w", tg.Display, repo.ErrEmptyRepository)
 		}
-		return download(ctx, tg, ref, dir)
+		return download(ctx, tg, ref, dir, warn)
 	}
 	d.listOrg = func(_ context.Context, org repo.Target) ([]repo.Target, error) {
 		if !org.Org {

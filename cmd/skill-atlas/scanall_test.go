@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -287,5 +288,75 @@ func TestScanAllInterrupted(t *testing.T) {
 	}
 	if strings.Contains(progress.String(), "skill-atlas:") {
 		t.Errorf("progress %q reports cancelled downloads as failures", progress.String())
+	}
+}
+
+// Each checkout is deleted once its repository is done, whether it worked or not, and the scan
+// sees the files before that.
+func TestScanAllDeletesCheckouts(t *testing.T) {
+	root := t.TempDir()
+	download := func(_ context.Context, tg repo.Target, _, dir string) (repo.Checkout, error) {
+		if err := os.MkdirAll(filepath.Join(dir, "skills", "a"), 0o755); err != nil {
+			return repo.Checkout{}, err
+		}
+		if err := os.WriteFile(filepath.Join(dir, "skills", "a", "SKILL.md"), []byte("x"), 0o644); err != nil {
+			return repo.Checkout{}, err
+		}
+		if tg.Name == "r1" {
+			return repo.Checkout{}, errors.New("download r1 failed halfway")
+		}
+		return repo.Checkout{}, nil
+	}
+	scanDir := func(dir, name string, o scan.Options) (scan.Result, error) {
+		if _, err := os.Stat(filepath.Join(dir, "skills", "a", "SKILL.md")); err != nil {
+			return scan.Result{}, fmt.Errorf("checkout gone before the scan: %w", err)
+		}
+		if name == "r2" {
+			return scan.Result{}, errors.New("walk r2 failed")
+		}
+		return okScan(dir, name, o)
+	}
+	got, err := scanAll(context.Background(), sources(4), root, 2, scan.Options{}, download, scanDir, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"", "download r1 failed halfway", "walk r2 failed", ""}
+	for i, g := range got {
+		if msg := fmt.Sprint(g.err); (want[i] == "" && g.err != nil) || (want[i] != "" && msg != want[i]) {
+			t.Errorf("r%d: err = %v, want %q", i, g.err, want[i])
+		}
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("root holds %d entries after scanAll, want none", len(entries))
+	}
+}
+
+// At most parallel checkouts are on disk at once.
+func TestScanAllPeakCheckouts(t *testing.T) {
+	root := t.TempDir()
+	var mu sync.Mutex
+	peak := 0
+	download := func(_ context.Context, _ repo.Target, _, dir string) (repo.Checkout, error) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return repo.Checkout{}, err
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			return repo.Checkout{}, err
+		}
+		peak = max(peak, len(entries))
+		return repo.Checkout{}, nil
+	}
+	if _, err := scanAll(context.Background(), sources(20), root, 3, scan.Options{}, download, okScan, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if peak > 3 {
+		t.Errorf("%d checkouts on disk at once, want at most 3", peak)
 	}
 }

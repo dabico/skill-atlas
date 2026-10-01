@@ -221,7 +221,7 @@ func failedRepo(t *testing.T) htmlreport.Repo {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_, err = repo.Download(ctx, target, "", mkdir(t, "download-"))
+	_, err = repo.Download(ctx, target, "", mkdir(t, "download-"), nil)
 	if err == nil {
 		t.Fatalf("download of %s succeeded, want a failure", badRepoURL)
 	}

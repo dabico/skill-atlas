@@ -24,6 +24,7 @@ func netTarget(t *testing.T, url string) (context.Context, Target) {
 	if testing.Short() {
 		t.Skip("network test")
 	}
+	useCache(t) // every test downloads for real
 	tg, err := ParseURL(url)
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +38,7 @@ func downloadNet(t *testing.T, url, ref string) (Checkout, string, error) {
 	t.Helper()
 	ctx, tg := netTarget(t, url)
 	dir := filepath.Join(t.TempDir(), "repo")
-	co, err := Download(ctx, tg, ref, dir)
+	co, err := Download(ctx, tg, ref, dir, nil)
 	return co, dir, err
 }
 
@@ -89,6 +90,28 @@ func TestDownloadSSHForm(t *testing.T) {
 	}
 }
 
+// The second download of a commit comes from the archive cache: the archive host isn't reachable then.
+func TestDownloadNetCached(t *testing.T) {
+	ctx, tg := netTarget(t, ideavim)
+	if _, err := Download(ctx, tg, ideavimTag, t.TempDir(), nil); err != nil {
+		t.Fatal(err)
+	}
+	old := archiveBase
+	t.Cleanup(func() { archiveBase = old })
+	archiveBase = "http://127.0.0.1:1"
+	dir := t.TempDir()
+	co, err := Download(ctx, tg, ideavimTag, dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if co.SHA != ideavimSHA {
+		t.Errorf("got %+v, want %s", co, ideavimSHA)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "skills", "changelog", "SKILL.md")); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestDownloadUnknownRef(t *testing.T) {
 	_, _, err := downloadNet(t, ideavim, "no-such-ref")
 	if err == nil || err.Error() != `ref "no-such-ref" not found in github.com/JetBrains/ideavim` {
@@ -108,7 +131,7 @@ func TestDownloadNetCanceled(t *testing.T) {
 	_, tg := netTarget(t, ideavim)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := Download(ctx, tg, "", t.TempDir())
+	_, err := Download(ctx, tg, "", t.TempDir(), nil)
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("got %v, want context.Canceled", err)
 	}

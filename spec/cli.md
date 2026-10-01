@@ -132,6 +132,7 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 - The scan doesn't need history, so the tarball of 1 commit is enough.
 - An annotated tag resolves to the commit it points to.
 - If the tarball names a different commit than the one resolved, the download fails with an error.
+- A commit that is already in the [archive cache](#state) isn't downloaded again. The ref lookup with ls-remote still runs, so a branch that moved gets its new commit. The tool prints `Downloading <repo>…` in both cases.
 - The results show the commit SHA that was scanned, per repository.
 - Both steps go over HTTPS and send no credentials. Public repositories need none.
 - Private repositories aren't supported, whatever the URL form. GitHub answers as for a repository that doesn't exist, so the error reads `authentication failed for github.com/org/repo: the repository may be private or may not exist`.
@@ -196,9 +197,26 @@ Example: `skill-atlas scan --exclude integration-tests/ --exclude '**/fixtures' 
 
 ### State
 
-The tool stores no state, with 1 exception: the HTML report file (see [Delivery](#delivery)).
-The downloads go into one temporary directory, with a subdirectory per repository. The tool deletes it before it exits.
-The tarball is unpacked while it arrives. It isn't saved as a file.
+The tool leaves 2 things behind: the archive cache and the HTML report file (see [Delivery](#delivery)).
+
+The archive cache keeps the tarball of every commit the tool downloads, so the next scan of that commit doesn't download it again.
+
+- The cache is a directory in the user cache directory:
+  - Linux and other Unix systems: `$XDG_CACHE_HOME/skill-atlas/archives`, or `~/.cache/skill-atlas/archives` when `XDG_CACHE_HOME` isn't set.
+  - macOS: `~/Library/Caches/skill-atlas/archives`.
+  - Windows: `%LocalAppData%\skill-atlas\archives`.
+- Each tarball is 1 file, `<sha>.tar.gz`, named by the full commit SHA. The SHA is the only key. The tarball's top-level directory is the only part that names the repository, and the tool strips it, so a fork at the same commit uses the same file.
+- The tool unpacks the tarball while it arrives and writes it to a temporary file in the cache directory at the same time. Only after the tarball unpacked in full does the tool rename the file to `<sha>.tar.gz`. A failed or interrupted download leaves no file. 2 runs at the same time never read a partial file.
+- A cached tarball unpacks with the same checks as a download, see [Scan scope](#scan-scope). If it fails them, for example because the file is truncated or names another commit, the tool deletes the file and the partial checkout and downloads the commit again.
+- The tool updates a file's modification time each time it uses the file.
+- The cache has no size or age limit. The tool deletes a file only when it fails the checks. To clear the cache, delete the directory.
+- Only the owner can read the cache. The directory has mode 0700 and the files 0600.
+- If the cache can't be used, for example because the directory can't be created or written, the scan still works and downloads every tarball. The tool prints `skill-atlas: warning: archive cache unavailable: <error>` to stderr, once per run.
+
+The checkouts go into 1 temporary directory, with a subdirectory per repository.
+The tool deletes each subdirectory as soon as its repository is scanned or has failed, so at most `--parallel` checkouts are on disk at once.
+It deletes the temporary directory before it exits.
+
 Results are discarded after the scan. `--html` keeps the report file in the OS temp directory.
 
 ### Order
@@ -326,7 +344,7 @@ A select next to the filter box sets the order: `Name A–Z` (the default) or `N
 
 ### Delivery
 
-After the scan, and after the tool deletes the downloads, it writes the page to a new file in the OS temp directory. The file is named `skill-atlas-report-<random>.html` and is readable by its owner only.
+After the scan, and after the tool deletes the checkouts, it writes the page to a new file in the OS temp directory. The file is named `skill-atlas-report-<random>.html` and is readable by its owner only.
 
 - The tool prints `Report: <absolute path>` to stderr.
 - The tool opens the file in the browser as a `file://` URL, then exits with 0.
