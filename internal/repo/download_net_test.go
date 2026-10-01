@@ -55,9 +55,10 @@ func TestDownloadAnnotatedTag(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 		t.Error("the download has a .git directory")
 	}
+	// GitHub names the top-level directory <repo>-<sha>. ideavim also has modules named ideavim-*.
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "ideavim-") {
+		if strings.HasPrefix(e.Name(), "ideavim-"+ideavimSHA[:7]) {
 			t.Errorf("top-level directory %s wasn't stripped", e.Name())
 		}
 	}
