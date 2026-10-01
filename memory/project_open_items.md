@@ -27,7 +27,6 @@ From a code review run on 2026-09-30. Its fix phase never ran, so none of these 
 - Ctrl+C during the `--html` browser launch wait (up to 3s) ends the process with default signal handling, so the exit code isn't 130.
 - The zcaceres/skills fixture could move or disappear. CI would fail on the SHA check.
 - This machine's egress proxy blocks `codeload.github.com` (CONNECT 403), where GitHub redirects archive downloads. `github.com` itself works, so ls-remote works. Real downloads, the network tests in `internal/repo` and the e2e suite fail here with `can't reach github.com: Get "https://codeload.github.com/...": Forbidden`. Run them in CI. Don't try to bypass the proxy.
-- The org listing sends no credentials. GitHub allows 60 unauthenticated API requests per hour per IP, and CI runners share IPs, so `TestListOrgNet` and `TestHTMLOrg` could hit the limit in CI. Each uses 1 request.
 - `TestHTMLOrg` scans `github.com/agentskills` unpinned. It only checks for the `agentskills/agentskills` group and no failures.
 - A repository failure printed with its prefix during the downloads isn't printed again, even when empty repositories from an org shrink the results to 1.
 - The same proxy blocks `deb.debian.org` and `cdn.playwright.dev`, so `e2e/screenshots.sh` can't install Chromium here, in Docker or on the host. GitHub Actions artifacts (`productionresultssa*.blob.core.windows.net`) are blocked as well, so `gh run download` fails with Forbidden.
@@ -37,7 +36,6 @@ From a code review run on 2026-09-30. Its fix phase never ran, so none of these 
 
 ## Ideas not started
 
-- `GITHUB_TOKEN` support for private repos. The maintainer prefers it, next PR. It would also let an org scan list private repos ("available to the requester") and raise the API rate limit to 5,000 requests per hour. `apiRequest` in `internal/repo/org.go` is the place to add the header; `nextPage` already refuses next-page links off the API host.
 - Archive cache eviction: a size cap or a maximum age. A cache hit already touches the file's mtime, so last use is known. The cache grows without limit until then.
 - A way to bypass the cache for 1 run, e.g. a `--no-cache` flag or an environment variable.
 - Scanning a user's repositories (`/users/<user>/repos`). Org URLs for user accounts fail with "isn't a GitHub organization or doesn't exist".

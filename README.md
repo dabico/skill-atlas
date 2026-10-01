@@ -33,7 +33,7 @@ With several repositories, the TUI and the HTML page group skills by repository.
 A repository that fails to clone or scan doesn't stop the others: its error goes to stderr, the results show the rest with the failed one marked, and the exit code is 1.
 If every repository fails, nothing opens and the exit code is 1.
 
-Public HTTPS repositories need no credentials. SSH uses the SSH agent (`SSH_AUTH_SOCK`) and `~/.ssh/known_hosts`.
+Public repositories need no credentials. Set `GITHUB_TOKEN` (or `GH_TOKEN`) to scan private repositories the token can read, to list private repositories in an organization scan, and to raise the API rate limit from 60 to 5,000 requests per hour.
 Each clone is shallow, goes to a temporary directory, and is deleted before exit.
 
 Examples:

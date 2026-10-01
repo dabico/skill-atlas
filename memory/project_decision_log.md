@@ -77,6 +77,16 @@ These replace the cloning decisions above.
   - An unusable cache (no cache dir, mkdir, CreateTemp, write or rename fails) never fails the download. `skill-atlas: warning: archive cache unavailable: <err>` prints once per run.
   - Dirs 0700, files 0600. A hit touches the mtime. No eviction yet.
 
+## GitHub token (2026-10-01)
+
+Option C from the archive download decision, which the maintainer preferred.
+
+- The token comes from the environment only: `GITHUB_TOKEN`, then `GH_TOKEN` if the first is empty. There is no flag, because a flag leaks into `ps` and shell history. The design was given to the subagent by the main session; the maintainer wasn't asked about the flag.
+- It is sent only to `github.com` and `api.github.com` (`tokenHosts` in `internal/repo/auth.go`): `Authorization: Bearer` on the API and archive requests, basic auth with user `x-access-token` on ls-remote. Go's HTTP client keeps the header on the redirect to `codeload.github.com` and drops it for other domains.
+- The rate-limit error keeps its prefix and gains `; set GITHUB_TOKEN to raise the limit` when no token was sent.
+- Without access, a private repository still fails with `authentication failed for ...: the repository may be private or may not exist`.
+- This supersedes "no credentials" in the archive download and organization scan sections above.
+
 ## Multi-repo scan (PR #5)
 
 - `scan` takes several Git URLs. The ref only goes on the URL as `<url>#<ref>`. The `--ref` flag is gone.

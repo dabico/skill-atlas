@@ -47,7 +47,8 @@ var ErrEmptyRepository = errors.New("empty")
 
 // Download resolves ref with ls-remote and extracts the tarball of that commit into dir.
 // An empty ref means the remote's default branch; otherwise ref is a branch or tag name.
-// It never prompts and sends no credentials.
+// It never prompts. If GITHUB_TOKEN or GH_TOKEN is set, the token goes to GitHub hosts only, so
+// private repositories the token can read work.
 //
 // Tarballs are kept between runs in the archive cache, keyed by commit SHA. A cached commit is
 // unpacked without a request to the archive host. When the cache can't be used, Download still
@@ -81,7 +82,7 @@ func Download(ctx context.Context, t Target, ref, dir string, warn func(error)) 
 
 func lsRemote(ctx context.Context, url string) ([]*plumbing.Reference, error) {
 	rem := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{Name: "origin", URLs: []string{url}})
-	return rem.ListContext(ctx, &git.ListOptions{PeelingOption: git.AppendPeeled})
+	return rem.ListContext(ctx, listOptions(url))
 }
 
 // resolve finds the short ref name and the commit SHA to download.
@@ -191,6 +192,7 @@ func fetchArchive(ctx context.Context, t Target, sha, dir, cache string, warn fu
 	if err != nil {
 		return fmt.Errorf("download %s: %w", t.Display, err)
 	}
+	authorize(req)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return mapError(ctx, t, err)
