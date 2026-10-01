@@ -51,7 +51,7 @@ type pageShot struct {
 	act    func(t *testing.T, p playwright.Page) // runs after load, before the shot
 }
 
-// screenshotReports renders each report page once, from the fixtures the other tests already cloned.
+// screenshotReports renders each report page once, from the fixtures the other tests already downloaded.
 type screenshotReports struct {
 	single, multi, empty string            // file:// URLs
 	zoomIDs              map[string]string // "invalid" and "claude" -> section id
@@ -157,17 +157,17 @@ func capture(t *testing.T, browser playwright.Browser, s pageShot, u string) []b
 	return png
 }
 
-// buildScreenshotReports renders the 3 report pages in-process. Each fixture is cloned once, by cloneScan.
+// buildScreenshotReports renders the 3 report pages in-process. Each fixture is downloaded once, by downloadScan.
 func buildScreenshotReports(t *testing.T) screenshotReports {
 	t.Helper()
-	zoom := cloneScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{})
-	vim := cloneScan(t, ideavim.url, ideavim.tag, scan.Options{})
-	vimNone := cloneScan(t, ideavim.url, ideavim.tag, scan.Options{Exclude: []string{".claude/"}})
+	zoom := downloadScan(t, claudeSkills.url, claudeSkills.tag, scan.Options{})
+	vim := downloadScan(t, ideavim.url, ideavim.tag, scan.Options{})
+	vimNone := downloadScan(t, ideavim.url, ideavim.tag, scan.Options{Exclude: []string{".claude/"}})
 	if len(vimNone.skills) != 0 || vimNone.excluded == 0 {
 		t.Fatalf("excluding .claude/ left %d skills and %d excluded, want 0 and some", len(vimNone.skills), vimNone.excluded)
 	}
 
-	// A real failed clone gives the real error text.
+	// A real failed download gives the real error text.
 	bad := failedRepo(t)
 	toRepo := func(s scanned) htmlreport.Repo {
 		return htmlreport.Repo{
@@ -199,7 +199,7 @@ func buildScreenshotReports(t *testing.T) screenshotReports {
 	return rep
 }
 
-// failedRepo clones a repository that doesn't exist and returns it as a failed report entry.
+// failedRepo downloads a repository that doesn't exist and returns it as a failed report entry.
 func failedRepo(t *testing.T) htmlreport.Repo {
 	t.Helper()
 	const badRepoURL = "https://github.com/JetBrains/no-such-repo.git"
@@ -209,9 +209,9 @@ func failedRepo(t *testing.T) htmlreport.Repo {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_, err = repo.Clone(ctx, target, "", mkdir(t, "clone-"))
+	_, err = repo.Download(ctx, target, "", mkdir(t, "download-"))
 	if err == nil {
-		t.Fatalf("clone of %s succeeded, want a failure", badRepoURL)
+		t.Fatalf("download of %s succeeded, want a failure", badRepoURL)
 	}
 	return htmlreport.Repo{Name: target.Display, Err: err.Error()}
 }

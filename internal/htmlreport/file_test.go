@@ -31,7 +31,7 @@ func TestWriteFile(t *testing.T) {
 		t.Errorf("name %q, want prefix %q and suffix .html", name, FilePrefix)
 	}
 	if strings.HasPrefix(name, "skill-atlas-") && !strings.HasPrefix(name, "skill-atlas-report-") {
-		t.Errorf("name %q could be mistaken for the clone directory", name)
+		t.Errorf("name %q could be mistaken for the download directory", name)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil || string(got) != string(page) {

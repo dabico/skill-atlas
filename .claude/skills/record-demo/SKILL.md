@@ -14,7 +14,7 @@ description: Record screenshots, GIFs and videos of skill-atlas, both the bubble
 .claude/skills/record-demo/scripts/demo.sh tui my.tape other.tape   # custom tapes
 ```
 
-A full run takes about 1 minute. Each mode clones the demo repo once.
+A full run takes about 1 minute. Each mode downloads the demo repo once.
 
 ## Output
 
@@ -94,7 +94,7 @@ DEMO_QUERY=docs .claude/skills/record-demo/scripts/demo.sh tui .claude/skills/re
 
 It writes `tui-multi.gif`, `tui-multi.mp4`, `tui-multi-list.png`, `tui-multi-boundary.png`, `tui-multi-filter.png` and `tui-multi-exit.png`. With the 3 URLs above the header should read `67 skills, 2 invalid, 1 failed` and the exit code is 1. With several repos the filter also matches the repo name, so a query like `git` matches every skill from `github.com`. `demo.sh html` records a partial result too: exit 1 with a `Report:` line counts as success.
 
-Keep the `Hide` / `Wait+Screen` / `Show` block after the scan command. It waits for the header (`N skills, M invalid`) and cuts the clone time out of the recording. TUI keys: j/k or arrows move, Tab switches focus, `/` filters (Enter keeps, Esc clears), q quits.
+Keep the `Hide` / `Wait+Screen` / `Show` block after the scan command. It waits for the header (`N skills, M invalid`) and cuts the download time out of the recording. TUI keys: j/k or arrows move, Tab switches focus, `/` filters (Enter keeps, Esc clears), q quits.
 
 ## Custom HTML shots
 

@@ -14,11 +14,11 @@ import (
 	"skill-atlas/internal/skill"
 )
 
-// fakeDeps clones every repository except those whose name is in bad.
+// fakeDeps downloads every repository except those whose name is in bad.
 func fakeDeps(bad ...string) (deps, *[]string) {
 	var opened []string
 	d := deps{
-		clone: func(_ context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
+		download: func(_ context.Context, tg repo.Target, _, _ string) (repo.Checkout, error) {
 			for _, b := range bad {
 				if tg.Name == b {
 					return repo.Checkout{}, errors.New("authentication failed for " + tg.Display)
@@ -47,11 +47,11 @@ func TestPartialFailureHTMLWritesReportAndExits1(t *testing.T) {
 	dir := useTempDir(t)
 	d, opened := fakeDeps("bad")
 	var out, errb bytes.Buffer
-	code := runWith(d, []string{"scan", "--html", "https://x.test/o/good.git", "https://x.test/o/bad.git#v1"}, &out, &errb)
+	code := runWith(d, []string{"scan", "--html", "https://github.com/o/good.git", "https://github.com/o/bad.git#v1"}, &out, &errb)
 	if code != exitFail {
 		t.Fatalf("exit = %d, want %d; stderr %q", code, exitFail, errb.String())
 	}
-	if want := "skill-atlas: x.test/o/bad @ v1: authentication failed for x.test/o/bad\n"; !strings.Contains(errb.String(), want) {
+	if want := "skill-atlas: github.com/o/bad @ v1: authentication failed for github.com/o/bad\n"; !strings.Contains(errb.String(), want) {
 		t.Errorf("stderr %q lacks %q", errb.String(), want)
 	}
 	files := reports(t, dir)
@@ -62,12 +62,12 @@ func TestPartialFailureHTMLWritesReportAndExits1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"x.test/o/good", "x.test/o/bad @ v1", "1 skill, 0 invalid, 1 failed", "authentication failed for x.test/o/bad"} {
+	for _, want := range []string{"github.com/o/good", "github.com/o/bad @ v1", "1 skill, 0 invalid, 1 failed", "authentication failed for github.com/o/bad"} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("report lacks %q", want)
 		}
 	}
-	if strings.Index(string(page), "x.test/o/good") > strings.Index(string(page), "x.test/o/bad") {
+	if strings.Index(string(page), "github.com/o/good") > strings.Index(string(page), "github.com/o/bad") {
 		t.Error("repositories are not in command-line order")
 	}
 	if len(*opened) != 1 {
@@ -82,11 +82,11 @@ func TestAllFailedExits1WithoutReport(t *testing.T) {
 	dir := useTempDir(t)
 	d, opened := fakeDeps("a", "b")
 	var errb bytes.Buffer
-	code := runWith(d, []string{"scan", "--html", "https://x.test/o/a.git", "https://x.test/o/b.git"}, &bytes.Buffer{}, &errb)
+	code := runWith(d, []string{"scan", "--html", "https://github.com/o/a.git", "https://github.com/o/b.git"}, &bytes.Buffer{}, &errb)
 	if code != exitFail {
 		t.Fatalf("exit = %d, want %d", code, exitFail)
 	}
-	for _, want := range []string{"skill-atlas: x.test/o/a: ", "skill-atlas: x.test/o/b: "} {
+	for _, want := range []string{"skill-atlas: github.com/o/a: ", "skill-atlas: github.com/o/b: "} {
 		if !strings.Contains(errb.String(), want) {
 			t.Errorf("stderr %q lacks %q", errb.String(), want)
 		}
@@ -103,8 +103,8 @@ func TestSingleRepoFailureMessageUnchanged(t *testing.T) {
 	useTempDir(t)
 	d, _ := fakeDeps("only")
 	var errb bytes.Buffer
-	code := runWith(d, []string{"scan", "--html", "https://x.test/o/only.git#v1"}, &bytes.Buffer{}, &errb)
-	if want := "skill-atlas: authentication failed for x.test/o/only\n"; code != exitFail || strings.Contains(errb.String(), "@ v1:") || !strings.Contains(errb.String(), want) {
+	code := runWith(d, []string{"scan", "--html", "https://github.com/o/only.git#v1"}, &bytes.Buffer{}, &errb)
+	if want := "skill-atlas: authentication failed for github.com/o/only\n"; code != exitFail || strings.Contains(errb.String(), "@ v1:") || !strings.Contains(errb.String(), want) {
 		t.Errorf("exit %d, stderr %q; want %q with no repository prefix", code, errb.String(), want)
 	}
 }

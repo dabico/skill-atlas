@@ -30,13 +30,13 @@ func main() {
 
 // deps are the parts of a scan that tests replace.
 type deps struct {
-	clone   cloneFunc
-	scanDir scanFunc
-	open    func(url string) error
-	showTUI func(tui.Report) error
+	download downloadFunc
+	scanDir  scanFunc
+	open     func(url string) error
+	showTUI  func(tui.Report) error
 }
 
-var realDeps = deps{clone: repo.Clone, scanDir: scan.Dir, open: htmlreport.OpenBrowser, showTUI: tui.Run}
+var realDeps = deps{download: repo.Download, scanDir: scan.Dir, open: htmlreport.OpenBrowser, showTUI: tui.Run}
 
 func run(args []string, stdout, stderr io.Writer) int {
 	return runWith(realDeps, args, stdout, stderr)
@@ -91,7 +91,7 @@ func runScan(d deps, cmd command, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	results, err := scanAll(ctx, srcs, dir, cmd.parallel, scan.Options{Exclude: cmd.exclude}, d.clone, d.scanDir, stderr)
+	results, err := scanAll(ctx, srcs, dir, cmd.parallel, scan.Options{Exclude: cmd.exclude}, d.download, d.scanDir, stderr)
 	if err != nil {
 		return failure(stderr, err)
 	}
@@ -109,7 +109,7 @@ func runScan(d deps, cmd command, stderr io.Writer) int {
 		return exitFail
 	}
 
-	// Results are in memory; drop the clones and release Ctrl+C.
+	// Results are in memory; drop the downloads and release Ctrl+C.
 	os.RemoveAll(dir)
 	stop()
 	// Some repositories failed: show the rest, then exit 1.

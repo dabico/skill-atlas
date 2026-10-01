@@ -17,13 +17,13 @@ import (
 )
 
 const (
-	paneCols   = 120
-	paneRows   = 40
-	listCols   = 40 // listWidth at 120 columns
-	pollEvery  = 100 * time.Millisecond
-	cloneWait  = 3 * time.Minute
-	shortWait  = 20 * time.Second
-	sessionTag = "main"
+	paneCols     = 120
+	paneRows     = 40
+	listCols     = 40 // listWidth at 120 columns
+	pollEvery    = 100 * time.Millisecond
+	downloadWait = 3 * time.Minute
+	shortWait    = 20 * time.Second
+	sessionTag   = "main"
 )
 
 var sockSeq atomic.Int64
@@ -258,7 +258,7 @@ func TestTUI(t *testing.T) {
 
 	header := regexp.MustCompile(regexp.QuoteMeta(fmt.Sprintf("%s @ %s (%s)", f.display, f.tag, f.sha[:7])) +
 		`\s+` + fmt.Sprintf("%d skills, %d invalid", len(skills), invalid))
-	pane := s.waitFor(header, cloneWait)
+	pane := s.waitFor(header, downloadWait)
 	if !strings.Contains(leftPane(pane), namePrefix(displayName(skills[0]))) {
 		t.Errorf("list doesn't show first skill %q:\n%s", displayName(skills[0]), pane)
 	}
@@ -360,8 +360,8 @@ func TestTUIErrors(t *testing.T) {
 func TestTUIInterrupt(t *testing.T) {
 	t.Parallel()
 	s := startScan(t, ideavim.url+"#"+ideavim.tag)
-	s.waitFor(regexp.MustCompile(regexp.QuoteMeta("Cloning "+ideavim.display+" @ "+ideavim.tag)), shortWait)
-	// The clone takes seconds, so Ctrl+C sent right away lands mid-clone.
+	s.waitFor(regexp.MustCompile(regexp.QuoteMeta("Downloading "+ideavim.display+" @ "+ideavim.tag)), shortWait)
+	// The download takes a moment, so Ctrl+C sent right away lands mid-download.
 	s.keys("C-c")
 	if code := s.waitExit(30 * time.Second); code != 130 {
 		t.Errorf("exit code = %d, want 130\n%s", code, s.last)

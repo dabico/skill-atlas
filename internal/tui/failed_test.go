@@ -7,7 +7,7 @@ import (
 	"skill-atlas/internal/skill"
 )
 
-// failedReport has repos a (2 skills), b (failed before the clone finished) and c (failed after it, with a SHA).
+// failedReport has repos a (2 skills), b (failed before the download finished) and c (failed after it, with a SHA).
 func failedReport() Report {
 	return Report{Repos: []Repo{
 		{Name: "github.com/org/a", Ref: "main", SHA: "aaaaaaa1111111", Skills: []skill.Skill{mk("a-one"), mk("a-two")}},
@@ -38,7 +38,7 @@ func TestFailedRepoHeadingAndErrorRow(t *testing.T) {
 		at += i + len(want)
 	}
 	if strings.Contains(v, "org/b @ v9 (") {
-		t.Errorf("a repository that failed to clone shows a SHA:\n%s", v)
+		t.Errorf("a repository that failed to download shows a SHA:\n%s", v)
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 	"skill-atlas/internal/skill"
 )
 
-// failedRepos has alpha (2 skills), broken (failed before the clone finished) and walk (failed after it).
+// failedRepos has alpha (2 skills), broken (failed before the download finished) and walk (failed after it).
 func failedRepos() Report {
 	return Report{Repos: []Repo{
 		{Name: "github.com/o/alpha", Ref: "main", SHA: "aaaaaaa1111111", Skills: []skill.Skill{sk("x1"), sk("x2")}},
@@ -48,7 +48,7 @@ func TestFailedRepoSummaryAndHeadings(t *testing.T) {
 		t.Errorf("section headings = %q\nwant %q", sections, wantContents)
 	}
 	if strings.Contains(string(page), "broken @ v9 (") {
-		t.Error("a repository that failed to clone shows a SHA")
+		t.Error("a repository that failed to download shows a SHA")
 	}
 }
 

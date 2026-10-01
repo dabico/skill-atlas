@@ -69,7 +69,7 @@ func checkScan(t *testing.T, res scanned, wantPaths []string, wantExcluded int) 
 // AC1: without --exclude all 4 skills are found.
 func TestExcludeKoogDefault(t *testing.T) {
 	t.Parallel()
-	res := cloneScan(t, koog.url, koog.tag, scan.Options{})
+	res := downloadScan(t, koog.url, koog.tag, scan.Options{})
 	checkKoogCheckout(t, res)
 	checkScan(t, res, koog.paths, 0)
 }
@@ -77,7 +77,7 @@ func TestExcludeKoogDefault(t *testing.T) {
 // AC2: one directory pattern.
 func TestExcludeKoogOnePattern(t *testing.T) {
 	t.Parallel()
-	res := cloneScan(t, koog.url, koog.tag, scan.Options{Exclude: []string{"integration-tests/"}})
+	res := downloadScan(t, koog.url, koog.tag, scan.Options{Exclude: []string{"integration-tests/"}})
 	checkKoogCheckout(t, res)
 	checkScan(t, res, koog.paths[:2], 2)
 }
@@ -85,7 +85,7 @@ func TestExcludeKoogOnePattern(t *testing.T) {
 // AC3: two patterns combine.
 func TestExcludeKoogTwoPatterns(t *testing.T) {
 	t.Parallel()
-	res := cloneScan(t, koog.url, koog.tag, scan.Options{Exclude: []string{"integration-tests/", ".claude/skills/split-jvm-nonjvm/"}})
+	res := downloadScan(t, koog.url, koog.tag, scan.Options{Exclude: []string{"integration-tests/", ".claude/skills/split-jvm-nonjvm/"}})
 	checkKoogCheckout(t, res)
 	checkScan(t, res, koog.paths[:1], 3)
 }
@@ -94,7 +94,7 @@ func TestExcludeKoogTwoPatterns(t *testing.T) {
 func TestExcludeIdeavimUnchanged(t *testing.T) {
 	t.Parallel()
 	f := ideavim
-	res := cloneScan(t, f.url, f.tag, scan.Options{})
+	res := downloadScan(t, f.url, f.tag, scan.Options{})
 	if got := skillPaths(res.skills); !slices.Equal(got, f.paths) {
 		t.Errorf("paths = %v, want %v", got, f.paths)
 	}
@@ -113,14 +113,14 @@ func headerRE(f fixture, counts string) *regexp.Regexp {
 // AC5: the TUI header counts the excluded skills, and q exits 0.
 func TestTUIExcluded(t *testing.T) {
 	t.Parallel()
-	ref := cloneScan(t, koog.url, koog.tag, scan.Options{Exclude: []string{"integration-tests/"}})
+	ref := downloadScan(t, koog.url, koog.tag, scan.Options{Exclude: []string{"integration-tests/"}})
 	counts := fmt.Sprintf("%d skills, %d invalid, %d excluded", len(ref.skills), invalidCount(ref.skills), ref.excluded)
 	if !strings.HasPrefix(counts, "2 skills, ") || !strings.HasSuffix(counts, ", 2 excluded") {
 		t.Fatalf("scan API counts = %q", counts)
 	}
 
 	s := startScan(t, "--exclude", "integration-tests/", koog.url+"#"+koog.tag)
-	pane := s.waitFor(headerRE(koog, counts), cloneWait)
+	pane := s.waitFor(headerRE(koog, counts), downloadWait)
 	if !strings.Contains(leftPane(pane), ref.skills[0].DisplayName()) {
 		t.Errorf("list doesn't show first skill %q:\n%s", ref.skills[0].DisplayName(), pane)
 	}
@@ -137,7 +137,7 @@ func TestTUIExcluded(t *testing.T) {
 
 // The flags reach the scan through the binary.
 func TestTUIExcludeFlags(t *testing.T) {
-	all := fmt.Sprintf("4 skills, %d invalid", invalidCount(cloneScan(t, koog.url, koog.tag, scan.Options{}).skills))
+	all := fmt.Sprintf("4 skills, %d invalid", invalidCount(downloadScan(t, koog.url, koog.tag, scan.Options{}).skills))
 	cases := []struct {
 		name   string
 		args   []string
@@ -152,7 +152,7 @@ func TestTUIExcludeFlags(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			s := startScan(t, append(slices.Clone(c.args), koog.url+"#"+koog.tag)...)
-			pane := s.waitFor(headerRE(koog, c.counts), cloneWait)
+			pane := s.waitFor(headerRE(koog, c.counts), downloadWait)
 			if c.empty != "" && !strings.Contains(leftPane(pane), c.empty) {
 				t.Errorf("list pane lacks %q:\n%s", c.empty, pane)
 			}

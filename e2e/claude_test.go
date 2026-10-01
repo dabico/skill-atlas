@@ -25,7 +25,7 @@ func ext(key, value string) skill.Extension {
 func TestClaudeCodeFields(t *testing.T) {
 	t.Parallel()
 	f := claudeSkills
-	res := cloneScan(t, f.url, f.tag, scan.Options{})
+	res := downloadScan(t, f.url, f.tag, scan.Options{})
 	if res.checkout.Ref != f.tag {
 		t.Errorf("Ref = %q, want %q", res.checkout.Ref, f.tag)
 	}
