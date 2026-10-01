@@ -35,7 +35,7 @@ e2e/screenshots.sh [-update]                        # HTML screenshots, needs Do
 - Store no state. The download goes to a temp dir that is deleted before exit. The `--html` report file is the only thing left behind.
 - Validation follows the skills-ref reference validator. Fields outside the spec and the Claude Code table make a skill invalid.
 - Provider-specific fields go in a rule table like `internal/skill/claude.go` and show under the provider's heading in the TUI and the HTML report.
-- The HTML page has exactly 1 script, the filter. Don't add scripts or `unsafe-inline`.
+- The HTML page has exactly 1 script, which runs the filter and the sort. Don't add scripts or `unsafe-inline`.
 - E2E fixtures pin a tag and its commit SHA. The baseline is JetBrains/ideavim `2.47.1`.
 
 ## Writing

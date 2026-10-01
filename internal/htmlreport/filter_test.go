@@ -2,6 +2,7 @@ package htmlreport
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 
@@ -119,6 +120,8 @@ func TestRenderMatchText(t *testing.T) {
 	skills := append(filterSkills(), bad)
 	page, doc := render(t, Report{Repos: []Repo{{Name: "github.com/o/r", Skills: skills}}})
 
+	// The page lists the skills in name order A–Z.
+	slices.SortStableFunc(skills, skill.Compare)
 	var want []string
 	for _, s := range skills {
 		want = append(want, s.DisplayName()+"\n"+s.Description+"\n"+s.Path)
@@ -141,8 +144,9 @@ func TestRenderMatchText(t *testing.T) {
 		}
 	}
 	// A directory name stands in for a missing name, like the TUI.
-	if !strings.HasPrefix(want[1], "beta-dir\n") {
-		t.Errorf("match text for a nameless skill = %q", want[1])
+	nameless := slices.IndexFunc(skills, func(s skill.Skill) bool { return s.Dir == "beta-dir" })
+	if !strings.HasPrefix(want[nameless], "beta-dir\n") {
+		t.Errorf("match text for a nameless skill = %q", want[nameless])
 	}
 	// The hostile text stays inside the attribute value.
 	lower := strings.ToLower(string(page))

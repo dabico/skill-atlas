@@ -6,11 +6,11 @@ type: project
 
 # Open items
 
-Last updated 2026-10-01. `main` is at `4e77a2a`: PRs #1 to #8 merged (#6 HTML screenshot tests, #7 startup script for JetBrains Air, #8 archive download instead of cloning). Between #4 and #5 the maintainer committed `README.md`, `AGENTS.md` (`CLAUDE.md` symlinks to it), `memory/`, `.gitignore`, a PR template and the `record-demo` skill.
+Last updated 2026-10-01. `main` is at `afc22c7`: PRs #1 to #8 and #10 merged (#6 HTML screenshot tests, #7 startup script for JetBrains Air, #8 archive download, #10 sort by name). Between #4 and #5 the maintainer committed `README.md`, `AGENTS.md` (`CLAUDE.md` symlinks to it), `memory/`, `.gitignore`, a PR template and the `record-demo` skill.
 
 ## Open PRs
 
-- `feature/org-scan`: scan a GitHub organization (`https://github.com/<org>`) through the REST API listing. Worktree `.claude/worktrees/org-scan`. Committed locally; the push and the PR are next. The download network tests and the e2e suite (including the new `TestHTMLOrg`) can't run on this machine, so CI is their first run.
+- `feature/org-scan`: PR #9, scan a GitHub organization (`https://github.com/<org>`) through the REST API listing. Worktree `.claude/worktrees/org-scan`. `origin/main` was merged in after #10 (the maintainer asked for a rebase; AGENTS.md forbids force-pushes, so it was a merge). The Air review asked to delete each checkout after its scan; the maintainer agreed and asked to keep the archives as a cache between runs.
 - The PR #5 demo page is unpublished: `docs/demo/multi-repo/index.html` in the main checkout, ignored by git. The Artifact publish failed: this machine authenticates with `apiKeyHelper`, and Artifacts need a claude.ai login.
 
 ## Known bugs
@@ -30,6 +30,7 @@ From a code review run on 2026-09-30. Its fix phase never ran, so none of these 
 - The org listing sends no credentials. GitHub allows 60 unauthenticated API requests per hour per IP, and CI runners share IPs, so `TestListOrgNet` and `TestHTMLOrg` could hit the limit in CI. Each uses 1 request.
 - `TestHTMLOrg` scans `github.com/agentskills` unpinned. It only checks for the `agentskills/agentskills` group and no failures.
 - A repository failure printed with its prefix during the downloads isn't printed again, even when empty repositories from an org shrink the results to 1.
+- The same proxy blocks `deb.debian.org` and `cdn.playwright.dev`, so `e2e/screenshots.sh` can't install Chromium here, in Docker or on the host. GitHub Actions artifacts (`productionresultssa*.blob.core.windows.net`) are blocked as well, so `gh run download` fails with Forbidden.
 - `skeema/knownhosts` stays in `go.mod` as an indirect dependency of go-git's SSH transport, even though our code no longer imports it.
 
 ## Ideas not started

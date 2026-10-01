@@ -91,6 +91,15 @@ func TestScreenshots(t *testing.T) {
 			}
 		}
 	}
+	sortZA := func(t *testing.T, p playwright.Page) {
+		if _, err := p.Locator("#sort").SelectOption(playwright.SelectOptionValues{Values: playwright.StringSlice("desc")}); err != nil {
+			t.Fatal(err)
+		}
+		// Blur, so the shot doesn't depend on the focus ring.
+		if err := p.Locator("#sort").Blur(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	shots := []pageShot{
 		{name: "zoom-light", report: "single", size: desktop},
 		{name: "zoom-dark", report: "single", size: desktop, dark: true},
@@ -98,7 +107,9 @@ func TestScreenshots(t *testing.T) {
 		{name: "zoom-filter", report: "single", size: desktop, act: filter("laconic")},
 		{name: "zoom-invalid-skill", report: "single", size: desktop, anchor: rep.zoomIDs["invalid"]},
 		{name: "zoom-claude-fields", report: "single", size: desktop, anchor: rep.zoomIDs["claude"]},
+		{name: "zoom-sort-za", report: "single", size: desktop, act: sortZA},
 		{name: "multi-repo-failed", report: "multi", size: desktop},
+		{name: "multi-repo-sort-za", report: "multi", size: desktop, act: sortZA},
 		{name: "ideavim-no-skills", report: "empty", size: desktop},
 	}
 	for _, s := range shots {
@@ -175,8 +186,9 @@ func buildScreenshotReports(t *testing.T) screenshotReports {
 			Skills: s.skills, Excluded: s.excluded,
 		}
 	}
+	// The page numbers the sections in name order A–Z.
 	rep := screenshotReports{zoomIDs: map[string]string{}}
-	for i, s := range zoom.skills {
+	for i, s := range sortedSkills(zoom.skills) {
 		switch s.Path {
 		case "_template/SKILL.md":
 			rep.zoomIDs["invalid"] = fmt.Sprintf("skill-%d", i+1)

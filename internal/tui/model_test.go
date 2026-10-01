@@ -175,7 +175,7 @@ func TestLayoutSize(t *testing.T) {
 func TestListRows(t *testing.T) {
 	m := newTest(testSkills(), 100, 30)
 	v := view(m)
-	for _, want := range []string{"> pdf-processing", "  code-review", "! PDF-Tool", "[invalid]", "  data-analysis"} {
+	for _, want := range []string{"> code-review", "  data-analysis", "  pdf-processing", "! PDF-Tool", "[invalid]"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q:\n%s", want, v)
 		}
@@ -225,7 +225,7 @@ func TestListScrollsWithSelection(t *testing.T) {
 
 func TestDisplayNameFallback(t *testing.T) {
 	m := newTest(testSkills(), 100, 30)
-	press(m, "j", "j")
+	press(m, "G") // PDF-Tool, by its directory name, sorts last
 	v := view(m)
 	if !strings.Contains(v, "! PDF-Tool") {
 		t.Errorf("dir name fallback missing in list:\n%s", v)
@@ -240,6 +240,7 @@ func TestDisplayNameFallback(t *testing.T) {
 
 func TestDetailContent(t *testing.T) {
 	m := newTest(testSkills(), 120, 40)
+	press(m, "j", "j") // pdf-processing
 	v := view(m)
 	for _, want := range []string{
 		"skills/pdf-processing/SKILL.md",
@@ -280,7 +281,7 @@ func TestTabFocus(t *testing.T) {
 
 func TestDetailScrollResetsOnSelection(t *testing.T) {
 	skills := testSkills()
-	skills[0].Body = strings.Repeat("line of text\n\n", 100)
+	skills[1].Body = strings.Repeat("line of text\n\n", 100) // code-review, the first skill A–Z
 	m := newTest(skills, 100, 20)
 	press(m, "tab", "G")
 	if m.vp.YOffset() == 0 {
@@ -415,6 +416,7 @@ func TestTooSmall(t *testing.T) {
 
 func TestBackgroundColorSelectsStyle(t *testing.T) {
 	m := newTest(testSkills(), 100, 30)
+	press(m, "j", "j") // pdf-processing has a body
 	if !m.dark {
 		t.Fatal("default should be dark")
 	}
@@ -429,15 +431,16 @@ func TestBackgroundColorSelectsStyle(t *testing.T) {
 
 func TestRenderMarkdownFallbackOnBadStyle(t *testing.T) {
 	m := newTest(testSkills(), 100, 30)
-	s := m.skills[0]
-	if out := m.renderBody(0, s, 40); out == "" {
+	press(m, "j", "j") // pdf-processing has a body
+	i := m.selected()
+	if out := m.renderBody(i, m.skills[i], 40); out == "" {
 		t.Error("empty render")
 	}
 }
 
 func TestDetailProviderFields(t *testing.T) {
 	skills := testSkills()
-	skills[1].Extensions = []skill.Extension{
+	skills[3].Extensions = []skill.Extension{ // data-analysis, the second skill A–Z
 		{Provider: "Claude Code", Key: "argument-hint", Value: "[issue]"},
 		{Provider: "Claude Code", Key: "disable-model-invocation", Value: "true"},
 		{Provider: "Claude Code", Key: "hooks", Value: "PreToolUse (1)"},

@@ -100,7 +100,7 @@ func assertInert(t *testing.T, doc *html.Node, wantStyles, wantScripts int) {
 		switch n.Data {
 		case "html", "head", "body", "title", "header", "main", "nav", "section", "h1", "h2", "h3", "h4", "h5", "h6",
 			"p", "a", "ul", "ol", "li", "dl", "dt", "dd", "div", "span", "code", "pre", "em", "strong", "del",
-			"blockquote", "hr", "br", "table", "thead", "tbody", "tr", "th", "td", "input":
+			"blockquote", "hr", "br", "table", "thead", "tbody", "tr", "th", "td", "input", "select", "option":
 		case "style":
 			styles++
 		case "script":
@@ -232,7 +232,9 @@ func TestRenderHostile(t *testing.T) {
 }
 
 func TestRenderStructure(t *testing.T) {
+	// In name order A–Z, so the sections line up with the slice.
 	skills := []skill.Skill{
+		{Path: "skills/nameless/SKILL.md", Dir: "nameless", Errors: []string{"missing name", "missing description"}},
 		{
 			Path: "skills/pdf-processing/SKILL.md", Dir: "pdf-processing", Name: "pdf-processing",
 			Description: "Extract PDF text.\nUse when handling PDFs.", License: "Apache-2.0", AllowedTools: "Bash Read",
@@ -243,7 +245,6 @@ func TestRenderStructure(t *testing.T) {
 			Path: "skills/PDF-Tool/SKILL.md", Dir: "PDF-Tool", Name: "PDF-Tool", Description: "Broken.",
 			Errors: []string{`name "PDF-Tool" contains uppercase letters`, `name "PDF-Tool" doesn't match directory "pdf-tools"`},
 		},
-		{Path: "skills/nameless/SKILL.md", Dir: "nameless", Errors: []string{"missing name", "missing description"}},
 	}
 	sha := "c1ae565cfb98be30ea75e4b351e823846c69c3c8"
 	page, doc := render(t, Report{Repos: []Repo{{Name: "github.com/org/repo", Ref: "v1.2.0", SHA: sha, Skills: skills}}})
@@ -325,49 +326,49 @@ func TestRenderStructure(t *testing.T) {
 		}
 	}
 
-	// First section: description, fields, metadata order and rendered body.
-	first := textOf(sections[0])
+	// The pdf-processing section: description, fields, metadata order and rendered body.
+	first := textOf(sections[1])
 	for _, want := range []string{"Extract PDF text.\nUse when handling PDFs.", "license", "Apache-2.0", "allowed-tools", "Bash Read", "metadata", "version", "1.0", "author"} {
 		if !strings.Contains(first, want) {
 			t.Errorf("first section lacks %q", want)
 		}
 	}
 	if strings.Contains(first, "compatibility") {
-		t.Error("first section shows an empty compatibility field")
+		t.Error("pdf-processing section shows an empty compatibility field")
 	}
 	if strings.Index(first, "version") > strings.Index(first, "author") {
 		t.Error("metadata isn't in file order")
 	}
-	if got := textOf(elements(sections[0], "h3")[0]); got != "Usage" { // "# Usage" shifted below the skill name
+	if got := textOf(elements(sections[1], "h3")[0]); got != "Usage" { // "# Usage" shifted below the skill name
 		t.Errorf("body heading = %q", got)
 	}
 	for _, tag := range []string{"table", "del", "input"} {
-		if len(elements(sections[0], tag)) == 0 {
+		if len(elements(sections[1], tag)) == 0 {
 			t.Errorf("GFM output lacks <%s>", tag)
 		}
 	}
 	var hrefs []string
-	for _, a := range elements(sections[0], "a") {
+	for _, a := range elements(sections[1], "a") {
 		hrefs = append(hrefs, attr(a, "href"))
 	}
 	for _, want := range []string{"https://example.com", "docs/a.md"} {
 		if !slices.Contains(hrefs, want) {
-			t.Errorf("first section hrefs %v lack %q", hrefs, want)
+			t.Errorf("pdf-processing section hrefs %v lack %q", hrefs, want)
 		}
 	}
 
 	// A skill without a name shows its directory name.
-	if !strings.Contains(textOf(sections[2]), "nameless") {
+	if !strings.Contains(textOf(sections[0]), "nameless") {
 		t.Error("nameless skill doesn't show its directory name")
 	}
 	// A skill without a body has no body block.
-	for _, d := range elements(sections[1], "div") {
+	for _, d := range elements(sections[2], "div") {
 		if hasClass(d, "body") {
 			t.Error("skill without a body has a body block")
 		}
 	}
 	// Valid skills have no errors block.
-	for _, d := range elements(sections[0], "div") {
+	for _, d := range elements(sections[1], "div") {
 		if hasClass(d, "errors") {
 			t.Error("valid skill has an errors block")
 		}

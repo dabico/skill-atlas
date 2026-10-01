@@ -74,6 +74,16 @@ These replace the cloning decisions above.
 - `--parallel N` sets how many clones run at once. The default is 4 and the minimum is 1.
   Source: "Pralellism should also be flag-configurable". The maintainer picked the name `--parallel`.
 
+## Sorting (2026-10-01)
+
+- The TUI and the HTML report list skills by name, A–Z by default. Option A was name A–Z as the new default; option B was to keep path order and cycle path, A–Z, Z–A. The maintainer picked A.
+  Source: "Let's go with A, sorting repositories first followed by individual skills after."
+- With several repositories, repositories sort by name first, then the skills within each repository. The same direction applies to both levels. Failed and empty repositories sort with the rest.
+- Z–A is exactly the A–Z order reversed, at both levels. The TUI and the page script then agree without a second comparator.
+- In the TUI, `s` toggles A–Z and Z–A. The list title shows the order (`Skills A–Z`, `Skills N/M Z–A`). In the report it is a plain `<select>` next to the filter box, run by the same 1 script.
+  Source: "In TUI, sorting ASC/DESC by name can be a hotkey one toggles. In HTML mode, this is just a plain select."
+- The sort key is `DisplayName()` without letter case, then the exact name, then the path. Repositories compare by display name without letter case, then by ref. Both live in `internal/skill/order.go`. `scan.Dir` still returns path order; the order is a presentation concern.
+
 ## Stack
 
 - Go 1.27.1, module `skill-atlas`. Charm v2 (bubbletea, lipgloss, glamour), go-git v5, go.yaml.in/yaml/v3.
@@ -134,3 +144,5 @@ These replace the cloning decisions above.
 | go-git shallow clone                                     | go-git ls-remote, then the GitHub tarball of the commit | "Let's go with option A and narrow support to GitHub for now." (2026-10-01) |
 | SSH agent auth with `~/.ssh/known_hosts`                 | SSH URLs treated as HTTPS, no auth                | "Let's go with A for now, but C would be preferred." (2026-10-01)      |
 | Any HTTPS or SSH host                                    | `github.com` only                                 | Tarball URLs are GitHub-specific (2026-10-01)                          |
+| Skills in path order                                     | Name A–Z by default, Z–A with `s` or the select   | "Let's go with A, sorting repositories first followed by individual skills after." (2026-10-01) |
+| Repositories in command-line order in the TUI/report     | Repositories by name, then skills in each         | Same quote (2026-10-01); stderr lines keep their order                 |

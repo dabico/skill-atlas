@@ -118,9 +118,9 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 - Commit SHAs aren't supported. An unknown ref fails the scan with an error.
 - The same repository can appear more than once with different refs. The same repository with the same ref twice is a usage error (exit 2): `github.com/org/repo given twice`, or `github.com/org/repo @ v1 given twice` when a ref is set. The check compares the short form shown in the results, so `https://github.com/org/repo` and `git@github.com:org/repo.git` count as the same repository. It runs after the URLs are parsed. A URL that doesn't parse is an exit 1 error. With several URLs, that error starts with the bad URL.
 - A result is 1 repository, or 1 organization that failed to list. An organization that lists 3 repositories gives 3 results.
-- The tool downloads up to `--parallel` repositories at the same time and prints `Downloading <repo>[ @ <ref>]…` to stderr for each one. Results keep the command-line order.
+- The tool downloads up to `--parallel` repositories at the same time and prints `Downloading <repo>[ @ <ref>]…` to stderr for each one. The TUI and the report list the repositories by name, not in command-line order. See [Order](#order).
 - With several results, a repository that fails to download or scan doesn't stop the others. The tool records the failure for that repository and prints `skill-atlas: <repo>[ @ <ref>]: <error>` to stderr as it happens, before the TUI or report starts. Escape sequences in the error text are removed.
-- When some repositories fail, the TUI or the report shows all of them in command-line order, with the failed ones marked. The tool then exits 1, after the TUI quits or the report opens, so scripts can tell that the result is incomplete.
+- When some repositories fail, the TUI or the report shows all of them, with the failed ones marked. Failed repositories sort by name with the rest. The tool then exits 1, after the TUI quits or the report opens, so scripts can tell that the result is incomplete.
 - When every repository fails, the tool exits 1 and shows no TUI and writes no report file.
 - With 1 result, a failure prints `skill-atlas: <error>` without the repository prefix and exits 1.
 - In zsh with `extendedglob`, `#` starts a pattern, so quote a URL that has a ref: `'https://github.com/org/repo#v1'`.
@@ -151,7 +151,7 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 - The list comes from the GitHub REST API, `GET https://api.github.com/orgs/<org>/repos`, sorted by full name. It includes forks and archived repositories.
 - The request goes over HTTPS and sends no credentials, so the list has only public repositories. GitHub allows 60 requests per hour per IP address without credentials. 1 request returns up to 100 repositories.
 - Over the rate limit, the listing fails with `GitHub API rate limit exceeded, resets at 14:05`, in local time.
-- The repositories take the place of the organization in the command-line order. They download with the others, up to `--parallel` at a time. The TUI and the report show them as ordinary repositories, with the names GitHub returns, e.g. `github.com/JetBrains/ideavim` for `https://github.com/jetbrains`.
+- The repositories download with the others, up to `--parallel` at a time. The TUI and the report show them as ordinary repositories in [name order](#order), with the names GitHub returns, e.g. `github.com/JetBrains/ideavim` for `https://github.com/jetbrains`.
 - A listed repository without commits is left out of the results without a message. A repository without commits given by its own URL still fails with `repository github.com/org/repo is empty`.
 - An organization that fails to list becomes 1 failed result, named `github.com/<org>` with no ref or SHA. The other URLs continue. Examples: `github.com/org isn't a GitHub organization or doesn't exist`, the rate limit error, or the HTTP status. A user account gives the first error too, because the API path is for organizations only.
 - An organization with no repositories, or with only empty ones, fails with `no repositories found in github.com/<org>`.
@@ -201,6 +201,16 @@ The downloads go into one temporary directory, with a subdirectory per repositor
 The tarball is unpacked while it arrives. It isn't saved as a file.
 Results are discarded after the scan. `--html` keeps the report file in the OS temp directory.
 
+### Order
+
+The TUI and the HTML report list skills by name, A–Z by default.
+
+- The sort key is the skill `name`, or the directory name when the skill has no usable `name`. The comparison ignores letter case. Skills with the same key sort by the exact name, then by path.
+- With several repositories, the repositories sort by name first, then the skills within each repository. The name is the one in the headings, e.g. `github.com/org/a`, compared without letter case. The same repository with 2 refs sorts by ref. Failed repositories and repositories with no skills sort with the rest.
+- Z–A is the A–Z order reversed, for the repositories and for the skills in each.
+- The TUI switches the order with <kbd>s</kbd>, see [TUI](#tui). The report has a select, see [Sort](#sort).
+- The order only affects the TUI and the report. The scan finds the files in path order, and stderr lines print as the downloads run.
+
 ## TUI
 
 Split view: skill list on the left, details of the selected skill on the right.
@@ -208,42 +218,44 @@ This is the layout for 1 repository. See [Several repositories](#several-reposit
 
 ```text
  github.com/org/repo @ main (a1b2c3d)        12 skills, 2 invalid
-┌ Skills ──────────────────┬ pdf-processing ───────────────────────┐
-│ > pdf-processing         │ skills/pdf-processing/SKILL.md        │
-│   code-review            │                                       │
-│ ! PDF-Tool   [invalid]   │ Extract PDF text, fill forms, merge   │
-│   data-analysis          │ files. Use when handling PDFs.        │
+┌ Skills A–Z ──────────────┬ pdf-processing ───────────────────────┐
+│   code-review            │ skills/pdf-processing/SKILL.md        │
+│   data-analysis          │                                       │
+│ > pdf-processing         │ Extract PDF text, fill forms, merge   │
+│ ! PDF-Tool   [invalid]   │ files. Use when handling PDFs.        │
 │                          │                                       │
 │                          │ license: Apache-2.0                   │
 └──────────────────────────┴───────────────────────────────────────┘
- j/k move · tab focus · / filter · q quit
+ j/k move · tab focus · / filter · s sort · q quit
 ```
 
 - Header: repository URL, ref, short commit SHA, skill count, invalid count. When the scan excluded any `SKILL.md`, the counts also show the excluded count, e.g. `2 skills, 0 invalid, 2 excluded`. Without exclusions the header has no excluded count.
-- List pane: skill `name`, with an `[invalid]` badge on invalid skills.
+- List pane: skill `name`, with an `[invalid]` badge on invalid skills. The skills are in [name order](#order), A–Z at the start. The top border shows the order: `Skills A–Z` or `Skills Z–A`.
 - Detail pane: path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields (Claude Code fields under their own heading), and validation errors for invalid skills. Below that, the full Markdown body, rendered.
 - <kbd>Tab</kbd> switches focus between the panes. j/k scroll the detail pane while it has focus.
-- <kbd>/</kbd> filters the list by name, description and path. <kbd>Esc</kbd> clears the filter.
+- <kbd>/</kbd> filters the list by name, description and path. <kbd>Esc</kbd> clears the filter. While a filter is active, the top border reads `Skills N/M A–Z` (or `Z–A`), with N matching and M total.
+- <kbd>s</kbd> switches the list between name A–Z and Z–A. It works with either pane focused, but not while typing a filter, where it is a letter. The selected skill stays selected, and the list scrolls to keep it in view. The filter stays active. The detail pane doesn't change.
 - <kbd>q</kbd> or <kbd>Ctrl+C</kbd> quits.
 - A scan with no skills shows `No skills found` in the list pane. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
 - The list shows the directory name when a skill has no usable `name`.
-- Footer: key hints.
+- Footer: key hints. While a filter is active they leave out `/ filter`, so they fit in 60 columns.
 
 ### Several repositories in the TUI
 
 ```text
  2 repositories                              15 skills, 2 invalid
-┌ Skills ──────────────────┬ pdf-processing ───────────────────────┐
+┌ Skills A–Z ──────────────┬ pdf-processing ───────────────────────┐
 │ github.com/org/a @ main… │ github.com/org/a @ main (a1b2c3d)     │
-│ > pdf-processing         │ skills/pdf-processing/SKILL.md        │
-│   code-review            │                                       │
+│   code-review            │ skills/pdf-processing/SKILL.md        │
+│ > pdf-processing         │                                       │
 │ github.com/org/b @ v1 (… │ Extract PDF text, fill forms, merge   │
 │ ! PDF-Tool   [invalid]   │ files. Use when handling PDFs.        │
 └──────────────────────────┴───────────────────────────────────────┘
 ```
 
 - Header: `N repositories` on the left, bold. On the right, the totals over all repositories: `N skills, M invalid`, plus `, K excluded` when any repository excluded files and `, Z failed` when Z repositories failed, e.g. `15 skills, 2 invalid, 1 failed`.
-- The list is grouped by repository, in command-line order. Each group starts with a heading row, `<repo> @ <ref> (<short sha>)`. Headings can't be selected. The cursor skips them.
+- The list is grouped by repository, with the repositories in [name order](#order). Each group starts with a heading row, `<repo> @ <ref> (<short sha>)`. Headings can't be selected. The cursor skips them.
+- <kbd>s</kbd> reverses the order of the groups and of the skills in each group. Empty and failed repositories move with their headings.
 - When the cursor is on the first skill of a group, the list scrolls to show the heading too, if it fits.
 - A repository with no skills shows its heading and a dim `No skills found` row. With exclusions the row reads `No skills found (2 excluded)`. The row isn't shown while a filter is active.
 - A repository that failed shows its heading and, under it, a row with the error message in the warning style, e.g. `authentication failed for github.com/org/b`. The heading has no `(<short sha>)` when the download did not finish. An organization that failed to list shows the same way, with the heading `github.com/<org>`. The error row can't be selected and the cursor skips it. Like the `No skills found` row it is not shown while a filter is active. A message longer than the list pane is cut with `…`. The full message is on stderr. Escape sequences in it are removed.
@@ -259,23 +271,24 @@ It needs no terminal. It combines with `--exclude`: the page lists the skills th
 The page has the same information as the TUI:
 
 - Header: repository URL, ref, short commit SHA, skill count, invalid count. With several repositories, see [Several repositories](#several-repositories-in-the-report). The full commit SHA shows as hover text on the short one. When `--exclude` skipped files, the counts end with `, K excluded`: `5 skills, 1 invalid, 1 excluded`. Without exclusions the page omits it.
-- Contents: a list that links to each skill. Invalid skills have an `invalid` badge.
+- Contents: a list that links to each skill, in [name order](#order) A–Z. Invalid skills have an `invalid` badge.
 - Skill sections: `name`, path of the `SKILL.md` relative to the repository root, full `description`, other frontmatter fields (Claude Code fields under their own `Claude Code` heading, like the TUI detail pane), and validation errors for invalid skills. Below that, the full Markdown body, rendered.
 - A scan with no skills shows `No skills found`. When exclusions removed every `SKILL.md`, it shows `No skills found (2 excluded)`.
 - The list shows the directory name when a skill has no usable `name`.
 - A filter box narrows the page to matching skills. See [Filter](#filter).
+- A select next to the filter box sets the order. See [Sort](#sort).
 
 ### Several repositories in the report
 
 - The `<h1>` reads `N repositories`, followed by the totals line. There is no single ref or SHA line.
-- Contents are grouped by repository. Each group has a heading with the repository name, ref, short SHA (the full SHA is the hover text) and its own counts, e.g. `2 skills, 1 invalid, 1 excluded`.
+- Contents are grouped by repository, with the repositories in [name order](#order). Each group has a heading with the repository name, ref, short SHA (the full SHA is the hover text) and its own counts, e.g. `2 skills, 1 invalid, 1 excluded`.
 - A repository with no skills shows `No skills found` (or `No skills found (2 excluded)`) in the contents. It has no skill sections.
 - A repository that failed shows in the contents and as a section group, each with the heading (`failed` in place of the counts) and the error message as a note. The heading has no short SHA when the download did not finish. An organization that failed to list shows the same way, with the heading `github.com/<org>`. Like the empty-repository note, the note hides while a filter is active. The message is escaped and has no escape sequences.
 - The totals line ends with `, Z failed` when Z repositories failed.
-- Skill sections sit under a heading per repository. Section ids are `repo-<R>-skill-<N>`, counted from 1. With 1 repository the ids stay `skill-<N>`.
+- Skill sections sit under a heading per repository, in the same order as the contents. Section ids are `repo-<R>-skill-<N>`, counted from 1 in A–Z order. With 1 repository the ids stay `skill-<N>`.
 - Heading levels nest: the page title is `h1`, repository headings are `h2` and skill names `h3`. Headings in a body keep the same offset below the skill name as with 1 repository. Levels stop at `h6`.
 - The filter also matches the repository name. A repository group hides when none of its skills match. `Skills N/M` counts the skills in all repositories.
-- The page still has 1 script, the filter.
+- The page still has 1 script, for the filter and the sort.
 
 ### Filter
 
@@ -284,16 +297,26 @@ The box matches the TUI <kbd>/</kbd> filter.
 - It keeps the skills whose name (or directory name), description or path contains the typed text. The match ignores case.
 - The contents list and the skill sections both narrow.
 - While the box has text, a line shows `Skills N/M`, with N matching and M total. At 0 matches the page shows `No matching skills`.
-- <kbd>/</kbd> focuses the box unless focus is already in a text field. <kbd>Esc</kbd> clears the box and restores every skill.
-- The filter is for reading. It doesn't change the report file or the order of skills.
+- <kbd>/</kbd> focuses the box unless focus is already in a text field or the sort select. <kbd>Esc</kbd> clears the box and restores every skill.
+- The filter is for reading. It doesn't change the report file. The [sort](#sort) sets the order.
 - Without JavaScript the box is hidden and the page shows every skill.
 
 A text box can't be filtered with CSS alone. CSS selectors see the `value` attribute, which doesn't change while the user types, and `:placeholder-shown` only tells empty from non-empty. A script is the smallest way to read the typed text.
 
+### Sort
+
+A select next to the filter box sets the order: `Name A–Z` (the default) or `Name Z–A`. Its accessible name is `Sort skills`.
+
+- The tool writes the page in A–Z order, so section ids count in that order. The links in the contents don't change with the order.
+- `Name Z–A` reverses the contents entries and the skill sections. With several repositories it also reverses the repository groups, in the contents and in the sections. `Name A–Z` puts the page back in the written order.
+- The sort and the filter combine. Changing the order keeps the filter, and `Skills N/M` stays the same.
+- The sort is for reading. It doesn't change the report file.
+- Without JavaScript the select is hidden with the filter box, and the page shows A–Z.
+
 ### Page
 
 - The page is 1 HTML document with inline CSS. It makes no external requests: no remote fonts, scripts, styles or images.
-- The page has 1 inline script, which runs the [filter](#filter). It reads the typed text and the `data-match` attribute of each skill, toggles the `hidden` attribute and sets text with `textContent`. It makes no network calls and uses no `eval` or `innerHTML`. It never writes skill content into the page. A page with no skills has no script.
+- The page has 1 inline script, which runs the [filter](#filter) and the [sort](#sort). It reads the typed text, the selected order and the `data-match` attribute of each skill. It toggles the `hidden` attribute, sets text with `textContent` and moves existing elements to reverse their order. It makes no network calls and uses no `eval` or `innerHTML`. It never writes skill content into the page. A page with no skills has no script and no select.
 - A Content Security Policy enforces this. With skills: `default-src 'none'; script-src 'sha256-<hash>'; style-src 'unsafe-inline'; img-src data:`. The tool computes the hash from the exact script text. The policy has no `'unsafe-inline'` for scripts, so the browser blocks any other script. Without skills the policy has no `script-src`.
 - Colors follow the browser's light or dark setting. The layout fits a phone screen.
 - The Markdown body uses GitHub Flavored Markdown. Headings in the body sit 2 levels below the skill `name`.
