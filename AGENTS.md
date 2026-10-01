@@ -40,7 +40,7 @@ e2e/screenshots.sh [-update]                        # HTML screenshots, needs Do
 
 ## Writing
 
-- Use the anti-ai-writing-style skill for the spec, PR descriptions, README and docs.
+- Use the `/anti-ai-writing-style` skill for the spec, PR descriptions, README and docs.
 
 ## Workflow
 
@@ -50,7 +50,7 @@ e2e/screenshots.sh [-update]                        # HTML screenshots, needs Do
 - Never merge without the maintainer's explicit OK.
 - Never force-push. Resolve conflicts by merging `origin/main` into the branch.
 - After a merge, delete the worktree and branch once the local head matches the PR's final SHA.
-- Don't commit `.idea/`, `bin/` or `README.md` unless asked. `memory/` follows the Memory rules below.
+- Don't commit `.idea/` and `bin/` unless asked. `memory/` follows the Memory rules below.
 
 ## Memory
 

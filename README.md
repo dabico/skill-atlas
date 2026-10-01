@@ -53,6 +53,7 @@ skill-atlas scan https://github.com/anthropics/skills.git 'https://github.com/ob
 | `j` / `k`     | move in the list, or scroll the detail pane when it has focus            |
 | `Tab`         | switch focus between list and detail                                     |
 | `/`           | filter by name, description and path (`Enter` keeps it, `Esc` clears it) |
+| `s`           | toggle sorting by name (default is ascending)                            |
 | `q`, `Ctrl+C` | quit                                                                     |
 
 The HTML page has a filter box that matches the same fields.
