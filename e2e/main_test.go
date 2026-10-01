@@ -49,7 +49,13 @@ func run(m *testing.M) int {
 	}
 	defer os.RemoveAll(workDir)
 	// Keep the archive cache in the scratch root, for this process and the binaries it starts.
-	// os.UserCacheDir reads XDG_CACHE_HOME on Linux only.
+	// os.UserCacheDir reads XDG_CACHE_HOME on Linux only. Playwright looks for its browsers
+	// under the same cache dir, so pin them to where they were installed first.
+	if os.Getenv("PLAYWRIGHT_BROWSERS_PATH") == "" {
+		if dir, err := os.UserCacheDir(); err == nil {
+			os.Setenv("PLAYWRIGHT_BROWSERS_PATH", filepath.Join(dir, "ms-playwright"))
+		}
+	}
 	if err := os.Setenv("XDG_CACHE_HOME", filepath.Join(workDir, "cache")); err != nil {
 		fmt.Fprintln(os.Stderr, "e2e:", err)
 		return 1
