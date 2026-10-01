@@ -48,6 +48,12 @@ func run(m *testing.M) int {
 		return 1
 	}
 	defer os.RemoveAll(workDir)
+	// Playwright looks for browsers in $XDG_CACHE_HOME/ms-playwright too.
+	// Pin it to the cache that screenshots.sh installed Chromium into, before XDG_CACHE_HOME moves.
+	if err := keepPlaywrightBrowsers(); err != nil {
+		fmt.Fprintln(os.Stderr, "e2e:", err)
+		return 1
+	}
 	// Keep the archive cache in the scratch root, for this process and the binaries it starts.
 	// os.UserCacheDir reads XDG_CACHE_HOME on Linux only.
 	if err := os.Setenv("XDG_CACHE_HOME", filepath.Join(workDir, "cache")); err != nil {
@@ -63,6 +69,18 @@ func run(m *testing.M) int {
 		return 1
 	}
 	return m.Run()
+}
+
+// keepPlaywrightBrowsers sets PLAYWRIGHT_BROWSERS_PATH to <user cache dir>/ms-playwright unless it is set.
+func keepPlaywrightBrowsers() error {
+	if os.Getenv("PLAYWRIGHT_BROWSERS_PATH") != "" {
+		return nil
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return nil // no default location for Playwright either
+	}
+	return os.Setenv("PLAYWRIGHT_BROWSERS_PATH", filepath.Join(cache, "ms-playwright"))
 }
 
 // moduleRoot resolves the module root from the test's working dir (<root>/e2e).
