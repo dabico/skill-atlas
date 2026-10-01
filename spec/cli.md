@@ -128,7 +128,10 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 - `--exclude` skips `SKILL.md` files by path. The flag is repeatable and applies to every repository.
 - Details are under [Excluded paths](#excluded-paths).
 - `--parallel <n>` sets how many repositories download at the same time. The default is 4. `<n>` is an integer of 1 or more, with no upper limit. Both `--parallel <n>` and `--parallel=<n>` work. Any other value (0, a negative number, text or nothing) is a usage error and exits 2.
-- The tool doesn't clone. It lists the remote refs over HTTPS with [go-git](https://github.com/go-git/go-git) (`ls-remote`) to find the commit of the ref. Then it downloads the tarball of that commit from `https://github.com/<owner>/<repo>/archive/<sha>.tar.gz`. The `git` binary isn't required.
+- The tool doesn't clone. It lists the remote refs over HTTPS with [go-git](https://github.com/go-git/go-git) (`ls-remote`) to find the commit of the ref. Then it downloads the tarball of that commit. The `git` binary isn't required.
+- Without a [GitHub token](#github-token) the tarball comes from `https://github.com/<owner>/<repo>/archive/<sha>.tar.gz`, which redirects to `codeload.github.com`. This route doesn't count against the API rate limit.
+- With a token the tarball comes from the REST API, `GET https://api.github.com/repos/<owner>/<repo>/tarball/<sha>`, because the github.com route ignores tokens and answers 404 for a private repository. The API redirects to a `codeload.github.com` URL that carries its own short-lived token. Each repository download with a token uses 1 API request. A commit already in the cache uses none.
+- Over the API rate limit, a download with a token fails with `GitHub API rate limit exceeded, resets at 14:05`.
 - The scan doesn't need history, so the tarball of 1 commit is enough.
 - An annotated tag resolves to the commit it points to.
 - If the tarball names a different commit than the one resolved, the download fails with an error.
@@ -162,7 +165,12 @@ skill-atlas scan [--html] [--exclude <pattern>]... [--parallel <n>] <git-url>[#<
 
 - The tool reads a token from the environment variable `GITHUB_TOKEN`. If that is unset or empty, it reads `GH_TOKEN`, which the `gh` CLI also uses. With neither, it sends no credentials.
 - There is no flag for the token, because a flag shows up in `ps` and in shell history.
-- The token goes to `github.com` and `api.github.com` only, and never to another host. It is sent on the ref lookup, the tarball download and the organization listing: as `Authorization: Bearer <token>` on the HTTP requests, and as HTTP basic auth (user `x-access-token`) on the ref lookup. The download redirects to `codeload.github.com`, a subdomain of `github.com`, which keeps the header. A redirect to any other host drops it.
+- The token goes to `github.com` and `api.github.com` only, and never to another host:
+  - The ref lookup on `github.com` sends it as HTTP basic auth with the user `x-access-token`.
+  - The organization listing and the tarball download on `api.github.com` send `Authorization: Bearer <token>`.
+  - The github.com tarball route never gets it.
+  - A redirect to any other host, `codeload.github.com` included, drops the header.
+- If GitHub answers 401 to a request that carried the token, the token is invalid or expired. GitHub does this even for public repositories. The ref lookup, the listing and the download then fail with `GitHub rejected the token in GITHUB_TOKEN`, or `GH_TOKEN` when the token came from there.
 - The tool never prints the token in an error, a warning or a log.
 
 ### Scan scope

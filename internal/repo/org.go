@@ -69,7 +69,7 @@ func listPage(ctx context.Context, org Target, url string) ([]Target, string, er
 	if err != nil {
 		return nil, "", fmt.Errorf("list repositories in %s: %w", org.Display, err)
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := do(req)
 	if err != nil {
 		var netErr net.Error
 		switch {
@@ -82,12 +82,14 @@ func listPage(ctx context.Context, org Target, url string) ([]Target, string, er
 	}
 	defer resp.Body.Close()
 
+	sent, name := sentToken(req)
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
 		return nil, "", fmt.Errorf("%s isn't a GitHub organization or doesn't exist", org.Display)
-	case (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) &&
-		resp.Header.Get("X-RateLimit-Remaining") == "0":
-		return nil, "", rateLimitError(resp.Header.Get("X-RateLimit-Reset"), req.Header.Get("Authorization") != "")
+	case resp.StatusCode == http.StatusUnauthorized && sent:
+		return nil, "", errBadToken(name)
+	case rateLimited(resp):
+		return nil, "", rateLimitError(resp.Header.Get("X-RateLimit-Reset"), sent)
 	case resp.StatusCode != http.StatusOK:
 		return nil, "", fmt.Errorf("list repositories in %s: %s", org.Display, resp.Status)
 	}
@@ -112,6 +114,12 @@ func listPage(ctx context.Context, org Target, url string) ([]Target, string, er
 		out = append(out, t)
 	}
 	return out, resp.Header.Get("Link"), nil
+}
+
+// rateLimited reports whether resp is GitHub's answer to a request over the API rate limit.
+func rateLimited(resp *http.Response) bool {
+	return (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests) &&
+		resp.Header.Get("X-RateLimit-Remaining") == "0"
 }
 
 // rateLimitError names the local time when the limit resets, if the API sent it. Without a token
