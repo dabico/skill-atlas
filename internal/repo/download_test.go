@@ -351,6 +351,9 @@ func TestResolve(t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Errorf("error %v, want %q", err, tt.wantErr)
 				}
+				if empty := strings.HasSuffix(tt.wantErr, " is empty"); errors.Is(err, ErrEmptyRepository) != empty {
+					t.Errorf("errors.Is(%v, ErrEmptyRepository) = %v, want %v", err, !empty, empty)
+				}
 				return
 			}
 			if err != nil {

@@ -1,7 +1,8 @@
-// Package repo validates GitHub repository URLs and downloads the tarball of 1 commit.
+// Package repo validates GitHub repository and organization URLs, lists the repositories of an
+// organization and downloads the tarball of 1 commit.
 package repo
 
-// Target is a validated GitHub repository URL.
+// Target is a validated GitHub repository or organization URL.
 type Target struct {
 	// URL is the URL as given by the user.
 	URL string
@@ -14,6 +15,9 @@ type Target struct {
 	Owner string
 	// Name is the repository name, e.g. "repo". Used as the directory name of a root-level SKILL.md.
 	Name string
+	// Org is true for an organization URL, e.g. "https://github.com/org". Remote and Name are empty
+	// then, and Display is "github.com/org".
+	Org bool
 }
 
 // Checkout describes what a download wrote.

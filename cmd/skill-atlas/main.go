@@ -31,12 +31,13 @@ func main() {
 // deps are the parts of a scan that tests replace.
 type deps struct {
 	download downloadFunc
+	listOrg  listFunc
 	scanDir  scanFunc
 	open     func(url string) error
 	showTUI  func(tui.Report) error
 }
 
-var realDeps = deps{download: repo.Download, scanDir: scan.Dir, open: htmlreport.OpenBrowser, showTUI: tui.Run}
+var realDeps = deps{download: repo.Download, listOrg: repo.ListOrg, scanDir: scan.Dir, open: htmlreport.OpenBrowser, showTUI: tui.Run}
 
 func run(args []string, stdout, stderr io.Writer) int {
 	return runWith(realDeps, args, stdout, stderr)
@@ -72,7 +73,11 @@ func runScan(d deps, cmd command, stderr io.Writer) int {
 		}
 		srcs[i] = source{target: target, ref: r.ref}
 	}
-	if msg := duplicate(srcs); msg != "" {
+	srcs, msg := checkOrgs(srcs)
+	if msg == "" {
+		msg = duplicate(srcs)
+	}
+	if msg != "" {
 		fmt.Fprintf(stderr, "skill-atlas: %s\n%s", msg, usageText)
 		return exitUsage
 	}
@@ -91,19 +96,41 @@ func runScan(d deps, cmd command, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	results, err := scanAll(ctx, srcs, dir, cmd.parallel, scan.Options{Exclude: cmd.exclude}, d.download, d.scanDir, stderr)
+	entries, err := expandOrgs(ctx, srcs, d.listOrg, stderr)
 	if err != nil {
 		return failure(stderr, err)
 	}
+	// Failed organizations aren't downloaded; the rest go through scanAll and back to their place.
+	var todo []source
+	var at []int
+	for i, e := range entries {
+		if e.err == nil {
+			todo = append(todo, e.source)
+			at = append(at, i)
+		}
+	}
+	done, err := scanAll(ctx, todo, dir, cmd.parallel, scan.Options{Exclude: cmd.exclude}, d.download, d.scanDir, stderr)
+	if err != nil {
+		return failure(stderr, err)
+	}
+	for j, r := range done {
+		entries[at[j]] = r
+	}
+	results := dropEmpty(entries)
+
 	failed := 0
 	for _, r := range results {
-		if r.err != nil {
-			failed++
+		if r.err == nil {
+			continue
+		}
+		failed++
+		if len(results) > 1 && !r.printed {
+			printFailure(stderr, r)
 		}
 	}
 	if failed == len(results) {
-		// With several repositories scanAll already printed each failure.
-		if len(results) == 1 {
+		// With several results each failure is printed above or as it happened.
+		if len(results) == 1 && !results[0].printed {
 			return failure(stderr, results[0].err)
 		}
 		return exitFail

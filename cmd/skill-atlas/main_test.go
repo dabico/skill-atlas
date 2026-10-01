@@ -137,6 +137,10 @@ func TestRunExitCodes(t *testing.T) {
 		{name: "bad exclude glob", args: []string{"scan", "--exclude", "[", "https://github.com/a/b"}, code: exitUsage, wantErrHas: "malformed"},
 		{name: "bad url", args: []string{"scan", "http://example.com/a/b.git"}, code: exitFail, wantErrHas: "skill-atlas: "},
 		{name: "local path", args: []string{"scan", "/tmp/some/repo"}, code: exitFail, wantErrHas: "skill-atlas: "},
+		{name: "help mentions orgs", args: []string{"help"}, code: exitOK, wantOut: "https://github.com/<org> scans every repository of the organization; it takes no #<ref>"},
+		{name: "org with ref", args: []string{"scan", "--html", "https://github.com/JetBrains#v1"}, code: exitUsage, wantErrHas: "skill-atlas: github.com/JetBrains is an organization, #v1 isn't supported"},
+		{name: "org twice", args: []string{"scan", "--html", "https://github.com/JetBrains", "https://github.com/jetbrains/"}, code: exitUsage, wantErrHas: "skill-atlas: github.com/jetbrains given twice"},
+		{name: "ssh org", args: []string{"scan", "--html", "git@github.com:JetBrains"}, code: exitFail, wantErrHas: "skill-atlas: SSH URLs can't name an organization, use https://github.com/JetBrains for an organization"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

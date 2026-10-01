@@ -30,6 +30,9 @@ var (
 	listRefs    = lsRemote
 )
 
+// ErrEmptyRepository is wrapped by the Download error for a repository without commits.
+var ErrEmptyRepository = errors.New("empty")
+
 // Download resolves ref with ls-remote and extracts the tarball of that commit into dir.
 // An empty ref means the remote's default branch; otherwise ref is a branch or tag name.
 // It never prompts and sends no credentials.
@@ -54,12 +57,12 @@ func resolve(ctx context.Context, t Target, ref string) (Checkout, error) {
 	refs, err := listRefs(ctx, t.Remote)
 	if err != nil {
 		if errors.Is(err, transport.ErrEmptyRemoteRepository) {
-			return Checkout{}, fmt.Errorf("repository %s is empty", t.Display)
+			return Checkout{}, fmt.Errorf("repository %s is %w", t.Display, ErrEmptyRepository)
 		}
 		return Checkout{}, mapError(ctx, t, err)
 	}
 	if len(refs) == 0 {
-		return Checkout{}, fmt.Errorf("repository %s is empty", t.Display)
+		return Checkout{}, fmt.Errorf("repository %s is %w", t.Display, ErrEmptyRepository)
 	}
 	// Peeled entries ("refs/tags/x^{}") hold the commit of an annotated tag.
 	byName := make(map[plumbing.ReferenceName]*plumbing.Reference, len(refs))

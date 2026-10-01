@@ -117,3 +117,23 @@ func TestNoFailuresNoFailedCount(t *testing.T) {
 		t.Error("report without failures mentions them")
 	}
 }
+
+// A failed organization listing has no ref and no SHA.
+func TestFailedEntryWithoutRef(t *testing.T) {
+	page, doc := render(t, Report{Repos: []Repo{
+		{Name: "github.com/acme", Err: "github.com/acme isn't a GitHub organization or doesn't exist"},
+		{Name: "github.com/o/alpha", Ref: "main", SHA: "aaaaaaa1111111", Skills: []skill.Skill{sk("x1")}},
+	}})
+	var heads []string
+	for _, n := range elements(doc, "h3") {
+		if hasClass(n, "repohead") {
+			heads = append(heads, textOf(n))
+		}
+	}
+	if want := []string{"github.com/acme failed", "github.com/o/alpha @ main (aaaaaaa) 1 skill, 0 invalid"}; !slices.Equal(heads, want) {
+		t.Errorf("contents headings = %q, want %q", heads, want)
+	}
+	if strings.Contains(string(page), "github.com/acme @") {
+		t.Error("the failed entry shows a ref")
+	}
+}

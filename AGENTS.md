@@ -9,7 +9,7 @@ Go CLI that scans a GitHub repository for agent skills (`SKILL.md`) and shows th
 go run ./cmd/skill-atlas scan <git-url>             # run locally
 go build ./...
 go test -short -race ./...                          # unit tests, no network
-go test -race -count=1 ./internal/repo/...          # download tests against GitHub
+go test -race -count=1 ./internal/repo/...          # download and listing tests against GitHub
 go test -tags e2e -count=1 -timeout 10m ./e2e/...   # needs tmux
 e2e/screenshots.sh [-update]                        # HTML screenshots, needs Docker
 ```
@@ -22,7 +22,7 @@ e2e/screenshots.sh [-update]                        # HTML screenshots, needs Do
 ## Layout
 
 - `cmd/skill-atlas`: flags, wiring, exit codes (0 ok, 1 failure, 2 usage, 130 interrupted).
-- `internal/repo`: GitHub URL parsing, ref lookup with go-git's ls-remote, and the tarball download.
+- `internal/repo`: GitHub repository and organization URL parsing, the organization listing over the REST API, ref lookup with go-git's ls-remote, and the tarball download.
 - `internal/scan`: walks the checkout for `SKILL.md` files and applies `--exclude`.
 - `internal/skill`: frontmatter parsing and validation. `claude.go` holds the Claude Code field rules.
 - `internal/tui`: bubbletea UI.
@@ -31,7 +31,7 @@ e2e/screenshots.sh [-update]                        # HTML screenshots, needs Do
 
 ## Architecture rules
 
-- Download GitHub tarballs over HTTPS. Resolve refs with go-git's ls-remote. Don't shell out to `git`.
+- Download GitHub tarballs over HTTPS. Resolve refs with go-git's ls-remote. List organization repositories with the GitHub REST API over HTTPS. Don't shell out to `git`.
 - Store no state. The download goes to a temp dir that is deleted before exit. The `--html` report file is the only thing left behind.
 - Validation follows the skills-ref reference validator. Fields outside the spec and the Claude Code table make a skill invalid.
 - Provider-specific fields go in a rule table like `internal/skill/claude.go` and show under the provider's heading in the TUI and the HTML report.

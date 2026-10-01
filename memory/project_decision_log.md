@@ -52,6 +52,19 @@ These replace the cloning decisions above.
   Source: "Let's go with A for now, but C would be preferred."
 - Unpacking writes only regular files and directories, strips the single top-level directory, skips symlinks and hard links, and fails on absolute paths or `..` escapes. A pax global `comment` (the commit SHA from git archive) that differs from the resolved SHA fails the download.
 
+## Organization scan (2026-10-01)
+
+- `scan https://github.com/<org>` lists the organization's repositories and scans each one at its default branch. Refs aren't supported on an org URL (usage error, exit 2). A repository URL whose owner is an org on the command line is dropped in favor of the org scan.
+  Source: "Implement support for organizations in GitHub. Submitting an organization URL downloads all skills from all repositories available to the requester. Refs should not be supported for this. If CLI has an org URL specified and a specific repository from that org is specified, then it's just ignored in favor of the org scan."
+- Defaults Claude picked, not asked:
+  - Org URLs are HTTPS only. `git@github.com:org` and `ssh://git@github.com/org` fail with a hint to use `https://github.com/<org>`.
+  - The listing uses `GET /orgs/<org>/repos` (type=all, sorted by full name), not `/users/<user>/repos`. A user account gets `github.com/<user> isn't a GitHub organization or doesn't exist`.
+  - Forks and archived repositories are included ("all repositories").
+  - Empty repositories (no commits) from a listing are left out silently. An empty repo given by its own URL still fails. An org with no repos, or only empty ones, fails with `no repositories found in github.com/<org>`.
+  - Covered repositories are dropped silently, with or without a ref, in any argument order, owner compared case-insensitively. The same org twice is a usage error.
+  - No credentials yet, so only public repositories are listed and the unauthenticated rate limit applies (60 requests per hour, 100 repos per request). "Available to the requester" needs `GITHUB_TOKEN`, the planned next PR.
+  - A failed listing becomes 1 failed result named `github.com/<org>`; the other URLs continue.
+
 ## Multi-repo scan (PR #5)
 
 - `scan` takes several Git URLs. The ref only goes on the URL as `<url>#<ref>`. The `--ref` flag is gone.

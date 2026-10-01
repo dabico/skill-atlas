@@ -16,6 +16,7 @@ const usageText = `Usage:
 
 Arguments:
   <git-url>[#<ref>]    repository to scan; #<ref> picks a branch or tag (default: remote's default branch)
+                       https://github.com/<org> scans every repository of the organization; it takes no #<ref>
 
 Flags:
   --html               open the results as an HTML file in the web browser instead of the TUI
@@ -41,6 +42,7 @@ type command struct {
 }
 
 // repoArg is one <git-url>[#<ref>] argument; ref is empty for the remote's default branch.
+// The URL can also name an organization, which takes no ref; runScan checks that after parsing.
 type repoArg struct {
 	url string
 	ref string
