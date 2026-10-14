@@ -143,6 +143,7 @@ Option C from the archive download decision, which the maintainer preferred.
 - Other pinned fixtures, each added for 1 feature:
   - JetBrains/koog `1.3.0` (`3acc88cf`) for `--exclude`. It has 2 skills in test data under `integration-tests/`.
   - zcaceres/skills `zoom@1.0.1` (`1d5af94`, 61 skills) for Claude Code fields. It's a personal repo, so the tag could move. The test checks the SHA, so CI would fail loudly.
+- The Network download tests job passes `GITHUB_TOKEN: ${{ github.token }}` (2026-10-14). The anonymous API allows 60 requests per hour per IP, and shared runners used it up, so `TestListOrgNet` failed on Dependabot PR #15 (run 38626680021). `netTarget` in `download_net_test.go` clears both token variables, so the download and resolve tests still check the anonymous web route and its errors. With a token, a missing repo answers `repository ... not found` instead of `authentication failed ...`. `TestHTMLOrg` in e2e still lists anonymously.
 - Every feature ships as a PR gated on green CI. The maintainer reviews and merges (squash).
 - The HTML report gets Playwright screenshot tests for regressions. An intentional change updates the screenshot.
   Source: "implement E2E tests involving "screenshots" with playright (test for regressions, if functionality changes intentionally then so does the "screenshot")"

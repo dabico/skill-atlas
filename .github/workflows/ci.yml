@@ -88,6 +88,10 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Test internal/repo without -short
+        env:
+          # The organization listing goes to the REST API, which allows 60 anonymous requests per
+          # hour per IP, shared by every job on the runner. The download tests clear it.
+          GITHUB_TOKEN: ${{ github.token }}
         run: go test -race -count=1 ./internal/repo/...
 
   e2e:
