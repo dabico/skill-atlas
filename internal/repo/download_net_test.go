@@ -24,7 +24,8 @@ func netTarget(t *testing.T, url string) (context.Context, Target) {
 	if testing.Short() {
 		t.Skip("network test")
 	}
-	useCache(t) // every test downloads for real
+	useCache(t)          // every test downloads for real
+	setTokens(t, "", "") // the anonymous route: no API requests, and the errors without a token
 	tg, err := ParseURL(url)
 	if err != nil {
 		t.Fatal(err)

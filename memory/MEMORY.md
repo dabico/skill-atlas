@@ -6,3 +6,4 @@
 - [sessions/2026-09-30.md](sessions/2026-09-30.md): spec, build, CI, PRs #1 to #5, record-demo skill, multi-repo scan, HTML screenshot tests
 - [sessions/2026-10-01-token.md](sessions/2026-10-01-token.md): GitHub token support, env vars only, GitHub hosts only, rate-limit hint
 - [sessions/2026-10-01.md](sessions/2026-10-01.md): archive download replaces cloning, GitHub only, SSH URLs as HTTPS; sort by name, `s` toggle and HTML select; organization scan, archive cache
+- [sessions/2026-10-14-ci-rate-limit.md](sessions/2026-10-14-ci-rate-limit.md): network CI job gets the workflow token after `TestListOrgNet` hit the anonymous rate limit; download tests stay anonymous
