@@ -6,3 +6,4 @@
 - [sessions/2026-09-30.md](sessions/2026-09-30.md): spec, build, CI, PRs #1 to #5, record-demo skill, multi-repo scan, HTML screenshot tests
 - [sessions/2026-10-01-token.md](sessions/2026-10-01-token.md): GitHub token support, env vars only, GitHub hosts only, rate-limit hint
 - [sessions/2026-10-01.md](sessions/2026-10-01.md): archive download replaces cloning, GitHub only, SSH URLs as HTTPS; sort by name, `s` toggle and HTML select; organization scan, archive cache
+- [sessions/2026-11-11-govulncheck.md](sessions/2026-11-11-govulncheck.md): scheduled vulncheck failure, Go 1.27.4, x/net v0.60.0, screenshot image bump; supersedes the 1.27.3 PRs #17 to #19
