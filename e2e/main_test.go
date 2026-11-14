@@ -61,6 +61,16 @@ func run(m *testing.M) int {
 		return 1
 	}
 
+	// The binaries run without a GitHub token, so error messages match anonymous use: with a token,
+	// a missing repository fails with "not found" instead of "authentication failed".
+	// TestHTMLOrg opts in with orgTokenEnv.
+	for _, name := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
+		if err := os.Unsetenv(name); err != nil {
+			fmt.Fprintln(os.Stderr, "e2e:", err)
+			return 1
+		}
+	}
+
 	binPath = filepath.Join(workDir, "skill-atlas")
 	build := exec.Command("go", "build", "-o", binPath, "./cmd/skill-atlas")
 	build.Dir = root

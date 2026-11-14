@@ -8,12 +8,21 @@ import (
 	"testing"
 )
 
+// orgTokenEnv holds a GitHub token that TestHTMLOrg hands to the binary as GITHUB_TOKEN.
+// Without it the listing gets the anonymous limit of 60 API requests per hour per IP address,
+// which other jobs on a shared CI runner IP can use up.
+const orgTokenEnv = "SKILL_ATLAS_E2E_GITHUB_TOKEN"
+
 // TestHTMLOrg scans the agentskills organization. Its repositories aren't pinned, so the test
 // checks only that the listing ran and that the report has a group for agentskills/agentskills.
 func TestHTMLOrg(t *testing.T) {
 	t.Parallel()
 	const repoDisplay = "github.com/agentskills/agentskills"
-	r := runHTML(t, requireTool(t, "true"), nil, "https://github.com/agentskills")
+	var env []string
+	if tok := os.Getenv(orgTokenEnv); tok != "" {
+		env = []string{"GITHUB_TOKEN=" + tok}
+	}
+	r := runHTML(t, requireTool(t, "true"), env, "https://github.com/agentskills")
 	if r.code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr:\n%s", r.code, r.stderr)
 	}

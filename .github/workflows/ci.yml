@@ -109,6 +109,8 @@ jobs:
       - name: E2E tests
         env:
           E2E_ARTIFACTS_DIR: ${{ runner.temp }}/e2e-artifacts
+          # Only TestHTMLOrg passes it on, so the org listing isn't held to the per-IP anonymous limit
+          SKILL_ATLAS_E2E_GITHUB_TOKEN: ${{ github.token }}
         run: go test -tags e2e -count=1 -timeout 10m ./e2e/...
       - name: Upload e2e artifacts
         if: failure()

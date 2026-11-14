@@ -6,7 +6,7 @@
 set -eu
 
 # Bump tag and digest together; then rewrite the baselines with -update.
-IMAGE='golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195'
+IMAGE='golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea'
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 artifacts=${E2E_ARTIFACTS_DIR:-${TMPDIR:-/tmp}/skill-atlas-screenshots}
