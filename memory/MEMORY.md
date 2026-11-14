@@ -6,3 +6,4 @@
 - [sessions/2026-09-30.md](sessions/2026-09-30.md): spec, build, CI, PRs #1 to #5, record-demo skill, multi-repo scan, HTML screenshot tests
 - [sessions/2026-10-01-token.md](sessions/2026-10-01-token.md): GitHub token support, env vars only, GitHub hosts only, rate-limit hint
 - [sessions/2026-10-01.md](sessions/2026-10-01.md): archive download replaces cloning, GitHub only, SSH URLs as HTTPS; sort by name, `s` toggle and HTML select; organization scan, archive cache
+- [sessions/2026-11-14.md](sessions/2026-11-14.md): nightly CI fix, Go 1.27.4 and x/net v0.60.0 for govulncheck, e2e token for TestHTMLOrg only

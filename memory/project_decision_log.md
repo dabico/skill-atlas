@@ -110,7 +110,7 @@ Option C from the archive download decision, which the maintainer preferred.
 
 ## Stack
 
-- Go 1.27.1, module `skill-atlas`. Charm v2 (bubbletea, lipgloss, glamour), go-git v5, go.yaml.in/yaml/v3.
+- Go 1.27.1, module `skill-atlas`, raised to 1.27.4 on 2026-11-14 for govulncheck. Charm v2 (bubbletea, lipgloss, glamour), go-git v5, go.yaml.in/yaml/v3.
   Source: "I was planning on using Go anyway"
 
 ## TUI
